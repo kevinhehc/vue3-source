@@ -412,6 +412,7 @@ const hasSetupBinding = (state: Data, key: string) =>
 
 export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
   get({ _: instance }: ComponentRenderContext, key: string) {
+    // 跳过reactivity代理，将渲染上下文设置成不可代理
     if (key === ReactiveFlags.SKIP) {
       return true
     }
@@ -430,10 +431,15 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
     // is the multiple hasOwn() calls. It's much faster to do a simple property
     // access on a plain object, so we use an accessCache object (with null
     // prototype) to memoize what access type a key corresponds to.
+    // accessCache缓存表 key ---> 来自哪个数据源
+    // 优先级： setup --> data --> ctx --> props
     let normalizedProps
+    // 非$开头
     if (key[0] !== '$') {
+      // 获取已缓存的key值数据来源
       const n = accessCache![key]
       if (n !== undefined) {
+        // 存在缓存直接获取
         switch (n) {
           case AccessTypes.SETUP:
             return setupState[key]
@@ -446,20 +452,26 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
           // default: just fallthrough
         }
       } else if (hasSetupBinding(setupState, key)) {
+        // 优先查找是否来自setupState
         accessCache![key] = AccessTypes.SETUP
         return setupState[key]
       } else if (data !== EMPTY_OBJ && hasOwn(data, key)) {
+        // 第二优先级查询是否来自data
         accessCache![key] = AccessTypes.DATA
         return data[key]
       } else if (
         // only cache other properties when instance has declared (thus stable)
         // props
+
+        // props 的情况
+        // 仅缓存 组件声明过的props
         (normalizedProps = instance.propsOptions[0]) &&
         hasOwn(normalizedProps, key)
       ) {
         accessCache![key] = AccessTypes.PROPS
         return props![key]
       } else if (ctx !== EMPTY_OBJ && hasOwn(ctx, key)) {
+        // 最后从上下文中查询
         accessCache![key] = AccessTypes.CONTEXT
         return ctx[key]
       } else if (!__FEATURE_OPTIONS_API__ || shouldCacheAccess) {
@@ -467,9 +479,11 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
       }
     }
 
+    // publicPropertiesMap是 $开头的公开属性的getter映射表
     const publicGetter = publicPropertiesMap[key]
     let cssModule, globalProperties
     // public $xxx properties
+    // 公共的$开头的属性
     if (publicGetter) {
       if (key === '$attrs') {
         track(instance.attrs, TrackOpTypes.GET, '')
@@ -480,16 +494,19 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
       }
       return publicGetter(instance)
     } else if (
+      // css module 的情况暂时忽略
       // css module (injected by vue-loader)
       (cssModule = type.__cssModules) &&
       (cssModule = cssModule[key])
     ) {
       return cssModule
     } else if (ctx !== EMPTY_OBJ && hasOwn(ctx, key)) {
+      // 用户可能设置$开头的自定义属性在上下文中
       // user may set custom properties to `this` that start with `$`
       accessCache![key] = AccessTypes.CONTEXT
       return ctx[key]
     } else if (
+      // 从全局的配置中查找属性
       // global properties
       ((globalProperties = appContext.config.globalProperties),
       hasOwn(globalProperties, key))
@@ -549,10 +566,12 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
       data[key] = value
       return true
     } else if (hasOwn(instance.props, key)) {
+      // 设置props是不被允许的，开发环境下报错
       __DEV__ && warn(`Attempting to mutate prop "${key}". Props are readonly.`)
       return false
     }
     if (key[0] === '$' && key.slice(1) in instance) {
+      // 实例上的$开头的属性为只读
       __DEV__ &&
         warn(
           `Attempting to mutate public property "${key}". ` +
@@ -560,6 +579,7 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
         )
       return false
     } else {
+      // 最后查询全局配置来修改
       if (__DEV__ && key in instance.appContext.config.globalProperties) {
         Object.defineProperty(ctx, key, {
           enumerable: true,
@@ -580,6 +600,7 @@ export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
     key: string,
   ) {
     let normalizedProps
+    // 按优先级依次判断是否有值
     return (
       !!accessCache![key] ||
       (data !== EMPTY_OBJ && hasOwn(data, key)) ||

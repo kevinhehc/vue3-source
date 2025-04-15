@@ -877,19 +877,25 @@ function setupStatefulComponent(
     }
   }
   // 0. create render proxy property access cache
+  // 0. 创建代理访问位置缓存
   instance.accessCache = Object.create(null)
   // 1. create public instance / render proxy
+  // 1. 创建一个组件的渲染上下文代理，相当于vue2的this
   instance.proxy = new Proxy(instance.ctx, PublicInstanceProxyHandlers)
   if (__DEV__) {
     exposePropsOnRenderContext(instance)
   }
   // 2. call setup()
+  // 2. 调用 setup()
   const { setup } = Component
   if (setup) {
     pauseTracking()
+    // 按需创建setup第二个参数 上下文
     const setupContext = (instance.setupContext =
       setup.length > 1 ? createSetupContext(instance) : null)
+    // 设置当前组件实例
     const reset = setCurrentInstance(instance)
+    // 调用setup
     const setupResult = callWithErrorHandling(
       setup,
       instance,
@@ -899,6 +905,7 @@ function setupStatefulComponent(
         setupContext,
       ],
     )
+
     const isAsyncSetup = isPromise(setupResult)
     resetTracking()
     reset()
@@ -908,10 +915,12 @@ function setupStatefulComponent(
       markAsyncBoundary(instance)
     }
 
+    // 处理setup执行结果
     if (isAsyncSetup) {
       setupResult.then(unsetCurrentInstance, unsetCurrentInstance)
       if (isSSR) {
         // return the promise so server-renderer can wait on it
+        // ssr下，等待promise返回再处理setup执行结果
         return setupResult
           .then((resolvedResult: unknown) => {
             handleSetupResult(instance, resolvedResult, isSSR)
@@ -922,8 +931,11 @@ function setupStatefulComponent(
       } else if (__FEATURE_SUSPENSE__) {
         // async setup returned Promise.
         // bail here and wait for re-entry.
+        // client端 等待再次进入
+        // 保存异步依赖
         instance.asyncDep = setupResult
         if (__DEV__ && !instance.suspense) {
+          // 开发环境下抛出警告，不支持异步的setup函数
           const name = Component.name ?? 'Anonymous'
           warn(
             `Component <${name}>: setup function returned a promise, but no ` +
@@ -939,9 +951,11 @@ function setupStatefulComponent(
         )
       }
     } else {
+      // 更详细的处理setup执行结果
       handleSetupResult(instance, setupResult, isSSR)
     }
   } else {
+    // 完成组件启动的后续工作
     finishComponentSetup(instance, isSSR)
   }
 }
@@ -1062,6 +1076,7 @@ export function finishComponentSetup(
             extend(finalCompilerOptions.compatConfig, Component.compatConfig)
           }
         }
+        // 有模板无render，进行编译（带编译器版本）
         Component.render = compile(template, finalCompilerOptions)
         if (__DEV__) {
           endMeasure(instance, `compile`)
@@ -1095,6 +1110,7 @@ export function finishComponentSetup(
   // the runtime compilation of template in SSR is done by server-render
   if (__DEV__ && !Component.render && instance.render === NOOP && !isSSR) {
     if (!compile && Component.template) {
+      // 开发环境下，不带编译器版本，却又没有render提示更改vue版本
       /* v8 ignore start */
       warn(
         `Component provided template option but ` +
@@ -1197,6 +1213,7 @@ export function createSetupContext(
       expose,
     })
   } else {
+    // 直接返回了`attrs`、`slots`和`emit`三个属性，这也是`setup`的`ctx`只能获取这三个属性的原因。
     return {
       attrs: new Proxy(instance.attrs, attrsProxyHandlers),
       slots: instance.slots,
