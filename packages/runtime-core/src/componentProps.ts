@@ -190,15 +190,19 @@ export type NormalizedPropsOptions = [NormalizedProps, string[]] | []
 
 export function initProps(
   instance: ComponentInternalInstance,
+  // 来自组件vnode 是传递到组件的props
   rawProps: Data | null,
   isStateful: number, // result of bitwise flag comparison
   isSSR = false,
 ): void {
+  // options 声明过的是props
   const props: Data = {}
+  // 未声明过传递 属于attrs // 设置内部对象标识
   const attrs: Data = createInternalObject()
 
   instance.propsDefaults = Object.create(null)
 
+  // 全量设置props和attrs
   setFullProps(instance, rawProps, props, attrs)
 
   // ensure all declared prop keys are present
@@ -209,19 +213,23 @@ export function initProps(
   }
 
   // validation
+  // 开发环境下 进行props的校验
   if (__DEV__) {
     validateProps(rawProps || {}, props, instance)
   }
 
   if (isStateful) {
     // stateful
+    // 带状态的组件
     instance.props = isSSR ? props : shallowReactive(props)
   } else {
     if (!instance.type.props) {
       // functional w/ optional props, props === attrs
+      // 函数式组件未声明props 将 attrs 当做 props
       instance.props = attrs
     } else {
       // functional w/ declared props
+      // 函数式组件声明过 props
       instance.props = props
     }
   }
@@ -237,16 +245,21 @@ function isInHmrContext(instance: ComponentInternalInstance | null) {
 
 export function updateProps(
   instance: ComponentInternalInstance,
+  // 新的来自VNode传递的props
   rawProps: Data | null,
+  // 旧的来自VNode传递的props
   rawPrevProps: Data | null,
   optimized: boolean,
 ): void {
+  // 去除当前的 props 和 attrs
   const {
     props,
     attrs,
     vnode: { patchFlag },
   } = instance
+  // 获取当前props的源数据
   const rawCurrentProps = toRaw(props)
+  // 获取标准化后的 props 配置
   const [options] = instance.propsOptions
   let hasAttrsChanged = false
 
@@ -258,6 +271,7 @@ export function updateProps(
     (optimized || patchFlag > 0) &&
     !(patchFlag & PatchFlags.FULL_PROPS)
   ) {
+    // 编译器优化情况 仅需要比对动态的props
     if (patchFlag & PatchFlags.PROPS) {
       // Compiler-generated props & no keys change, just set the updated
       // the props.
@@ -273,13 +287,16 @@ export function updateProps(
         if (options) {
           // attr / props separation was done on init and will be consistent
           // in this code path, so just check if attrs have it.
+          // attrs 和 props 的分离发生在init 并且不会变更，我们仅需判断是否在 attrs
           if (hasOwn(attrs, key)) {
             if (value !== attrs[key]) {
+              // 更新新值
               attrs[key] = value
               hasAttrsChanged = true
             }
           } else {
             const camelizedKey = camelize(key)
+            // 更新新值
             props[camelizedKey] = resolvePropValue(
               options,
               rawCurrentProps,
@@ -298,6 +315,7 @@ export function updateProps(
             }
           }
           if (value !== attrs[key]) {
+            // 不存在配置项 props = attrs
             attrs[key] = value
             hasAttrsChanged = true
           }
@@ -305,6 +323,7 @@ export function updateProps(
       }
     }
   } else {
+    // 全量更新
     // full props update.
     if (setFullProps(instance, rawProps, props, attrs)) {
       hasAttrsChanged = true
@@ -321,6 +340,7 @@ export function updateProps(
           // and converted to camelCase (#955)
           ((kebabKey = hyphenate(key)) === key || !hasOwn(rawProps, kebabKey)))
       ) {
+        // 需要处理不存在在 新rawProps中 但是存在于旧rawProps的 props
         if (options) {
           if (
             rawPrevProps &&
@@ -329,6 +349,7 @@ export function updateProps(
               // for kebab-case
               rawPrevProps[kebabKey!] !== undefined)
           ) {
+            // 存在于旧rawProps中并且不为undefined的prop设置为undefined
             props[key] = resolvePropValue(
               options,
               rawCurrentProps,
@@ -339,6 +360,7 @@ export function updateProps(
             )
           }
         } else {
+          // 直接删除
           delete props[key]
         }
       }
@@ -360,6 +382,7 @@ export function updateProps(
   }
 
   // trigger updates for $attrs in case it's used in component slots
+  // 触发来自 $attrs的更新
   if (hasAttrsChanged) {
     trigger(instance.attrs, TriggerOpTypes.SET, '')
   }
@@ -371,16 +394,19 @@ export function updateProps(
 
 function setFullProps(
   instance: ComponentInternalInstance,
+  // 传递到组件render后挂在VNode上的props
   rawProps: Data | null,
   props: Data,
   attrs: Data,
 ) {
+  // 标准化props options
   const [options, needCastKeys] = instance.propsOptions
   let hasAttrsChanged = false
   let rawCastValues: Data | undefined
   if (rawProps) {
     for (let key in rawProps) {
       // key, ref are reserved and never passed down
+      // 内部属性跳过
       if (isReservedProp(key)) {
         continue
       }
@@ -401,7 +427,10 @@ function setFullProps(
       const value = rawProps[key]
       // prop option names are camelized during normalization, so to support
       // kebab -> camel conversion here we need to camelize the key.
+
+      // 规范化key为小驼峰
       let camelKey
+      // 选项中存在该key
       if (options && hasOwn(options, (camelKey = camelize(key)))) {
         if (!needCastKeys || !needCastKeys.includes(camelKey)) {
           props[camelKey] = value
@@ -419,6 +448,7 @@ function setFullProps(
             continue
           }
         }
+        // 不在组件props选项声明的key中，也不在emit中，视作attrs
         if (!(key in attrs) || value !== attrs[key]) {
           attrs[key] = value
           hasAttrsChanged = true
@@ -427,6 +457,7 @@ function setFullProps(
     }
   }
 
+  // 处理默认值 和 强制转换Boolean型
   if (needCastKeys) {
     const rawCurrentProps = toRaw(props)
     const castValues = rawCastValues || EMPTY_OBJ
@@ -447,6 +478,7 @@ function setFullProps(
 }
 
 function resolvePropValue(
+  // 标准化后的 配置项
   options: NormalizedProps,
   props: Data,
   key: string,
@@ -456,8 +488,10 @@ function resolvePropValue(
 ) {
   const opt = options[key]
   if (opt != null) {
+    // 处理默认值
     const hasDefault = hasOwn(opt, 'default')
     // default values
+    // 默认值
     if (hasDefault && value === undefined) {
       const defaultValue = opt.default
       if (
@@ -512,11 +546,14 @@ export function normalizePropsOptions(
   const cache =
     __FEATURE_OPTIONS_API__ && asMixin ? mixinPropsCache : appContext.propsCache
   const cached = cache.get(comp)
+  // 使用缓存
   if (cached) {
     return cached
   }
 
+  // 取出组件props选项
   const raw = comp.props
+  // 规范后的props配置
   const normalized: NormalizedPropsOptions[0] = {}
   const needCastKeys: NormalizedPropsOptions[1] = []
 
@@ -535,14 +572,17 @@ export function normalizePropsOptions(
     if (!asMixin && appContext.mixins.length) {
       appContext.mixins.forEach(extendProps)
     }
+    // 处理来自extends的props
     if (comp.extends) {
       extendProps(comp.extends)
     }
+    // 处理来自mixin的props
     if (comp.mixins) {
       comp.mixins.forEach(extendProps)
     }
   }
 
+  // 无props声明也无来自混入或者继承的props选项
   if (!raw && !hasExtends) {
     if (isObject(comp)) {
       cache.set(comp, EMPTY_ARR as any)
@@ -550,24 +590,34 @@ export function normalizePropsOptions(
     return EMPTY_ARR as any
   }
 
+  // 数组写法 ['a', 'b']
   if (isArray(raw)) {
     for (let i = 0; i < raw.length; i++) {
       if (__DEV__ && !isString(raw[i])) {
         warn(`props must be strings when using array syntax.`, raw[i])
       }
+      // 转小驼峰
       const normalizedKey = camelize(raw[i])
+      // 校验key合法性 不以$开头
       if (validatePropName(normalizedKey)) {
+        // 没有配置项目，设置为空对象
         normalized[normalizedKey] = EMPTY_OBJ
       }
     }
   } else if (raw) {
     if (__DEV__ && !isObject(raw)) {
+      // 如果不是对象，警告 违法的props配置
       warn(`invalid props options`, raw)
     }
     for (const key in raw) {
+      // 转小驼峰
       const normalizedKey = camelize(key)
+      // 校验props name是否合法
       if (validatePropName(normalizedKey)) {
+        // 拿到opt对象
         const opt = raw[key]
+        // key: [Boolean]
+        // key: () => ....
         const prop: NormalizedProp = (normalized[normalizedKey] =
           isArray(opt) || isFunction(opt) ? { type: opt } : extend({}, opt))
         const propType = prop.type
@@ -605,6 +655,7 @@ export function normalizePropsOptions(
     }
   }
 
+  // 缓存
   const res: NormalizedPropsOptions = [normalized, needCastKeys]
   if (isObject(comp)) {
     cache.set(comp, res)
@@ -657,7 +708,10 @@ function validateProps(
   const camelizePropsKey = Object.keys(rawProps).map(key => camelize(key))
   for (const key in options) {
     let opt = options[key]
+    // 没有配置选项 跳过
     if (opt == null) continue
+
+    // 对比单个prop
     validateProp(
       key,
       resolvedValues[key],
@@ -676,35 +730,43 @@ function validateProp(
   value: unknown,
   prop: PropOptions,
   props: Data,
+  // 是否不存在值
   isAbsent: boolean,
 ) {
   const { type, required, validator, skipCheck } = prop
   // required!
+  // 必填校验
   if (required && isAbsent) {
     warn('Missing required prop: "' + name + '"')
     return
   }
   // missing but optional
+  // 非必填 允许 null undefine
   if (value == null && !required) {
     return
   }
   // type check
+  // 类型检测
   if (type != null && type !== true && !skipCheck) {
     let isValid = false
+    // 标准化为数组
     const types = isArray(type) ? type : [type]
     const expectedTypes = []
     // value is valid as long as one of the specified types match
     for (let i = 0; i < types.length && !isValid; i++) {
+      // 通过断言函数 获取 校验结果和校验的类型
       const { valid, expectedType } = assertType(value, types[i])
       expectedTypes.push(expectedType || '')
       isValid = valid
     }
     if (!isValid) {
+      // 未通过
       warn(getInvalidTypeMessage(name, value, expectedTypes))
       return
     }
   }
   // custom validator
+  // 自定义校验器
   if (validator && !validator(value, props)) {
     warn('Invalid prop: custom validator check failed for prop "' + name + '".')
   }

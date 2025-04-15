@@ -805,9 +805,12 @@ export function setupComponent(
 
   const { props, children } = instance.vnode
   const isStateful = isStatefulComponent(instance)
+
+  // 初始化props
   initProps(instance, props, isStateful, isSSR)
   initSlots(instance, children, optimized)
 
+  // 执行setup
   const setupResult = isStateful
     ? setupStatefulComponent(instance, isSSR)
     : undefined
