@@ -39,10 +39,11 @@ export interface SchedulerJob extends Function {
 }
 
 export type SchedulerJobs = SchedulerJob | SchedulerJob[]
-
+// 异步任务队列
 const queue: SchedulerJob[] = []
+// 当前执行异步任务的下标
 let flushIndex = -1
-
+// 异步任务队列执行完成后的异步回调队列
 const pendingPostFlushCbs: SchedulerJob[] = []
 let activePostFlushCbs: SchedulerJob[] | null = null
 let postFlushIndex = 0
@@ -50,6 +51,7 @@ let postFlushIndex = 0
 const resolvedPromise = /*@__PURE__*/ Promise.resolve() as Promise<any>
 let currentFlushPromise: Promise<void> | null = null
 
+// 任务单次微任务执行上限
 const RECURSION_LIMIT = 100
 type CountMap = Map<SchedulerJob, number>
 
@@ -111,6 +113,7 @@ export function queueJob(job: SchedulerJob): void {
   }
 }
 
+// 既没有执行任务也没有等待执行就添加任务到nextTick
 function queueFlush() {
   if (!currentFlushPromise) {
     currentFlushPromise = resolvedPromise.then(flushJobs)
@@ -166,7 +169,9 @@ export function flushPreFlushCbs(
 }
 
 export function flushPostFlushCbs(seen?: CountMap): void {
+  // 存在任务就执行
   if (pendingPostFlushCbs.length) {
+    // 拷贝一份去重的任务队列
     const deduped = [...new Set(pendingPostFlushCbs)].sort(
       (a, b) => getId(a) - getId(b),
     )
@@ -183,6 +188,7 @@ export function flushPostFlushCbs(seen?: CountMap): void {
       seen = seen || new Map()
     }
 
+    // 循环执行
     for (
       postFlushIndex = 0;
       postFlushIndex < activePostFlushCbs.length;
@@ -198,14 +204,17 @@ export function flushPostFlushCbs(seen?: CountMap): void {
       if (!(cb.flags! & SchedulerJobFlags.DISPOSED)) cb()
       cb.flags! &= ~SchedulerJobFlags.QUEUED
     }
+    // 重置信息
     activePostFlushCbs = null
     postFlushIndex = 0
   }
 }
 
+// 获取任务id
 const getId = (job: SchedulerJob): number =>
   job.id == null ? (job.flags! & SchedulerJobFlags.PRE ? -1 : Infinity) : job.id
 
+// 执行任务
 function flushJobs(seen?: CountMap) {
   if (__DEV__) {
     seen = seen || new Map()
@@ -221,6 +230,7 @@ function flushJobs(seen?: CountMap) {
     : NOOP
 
   try {
+    // 循环执行任务
     for (flushIndex = 0; flushIndex < queue.length; flushIndex++) {
       const job = queue[flushIndex]
       if (job && !(job.flags! & SchedulerJobFlags.DISPOSED)) {
@@ -267,6 +277,7 @@ function checkRecursiveUpdates(seen: CountMap, fn: SchedulerJob) {
   if (count > RECURSION_LIMIT) {
     const instance = fn.i
     const componentName = instance && getComponentName(instance.type)
+    // 任务在一次微任务中执行次数超过RECURSION_LIMIT视为循环任务，直接抛出错误
     handleError(
       `Maximum recursive updates exceeded${
         componentName ? ` in component <${componentName}>` : ``
@@ -280,6 +291,7 @@ function checkRecursiveUpdates(seen: CountMap, fn: SchedulerJob) {
     )
     return true
   }
+  // 未达到上限，增加计数
   seen.set(fn, count + 1)
   return false
 }
