@@ -328,29 +328,36 @@ export function createAppAPI<HostElement>(
 
       component(name: string, component?: Component): any {
         if (__DEV__) {
+          // 开发环境 校验指令名称合法性
           validateComponentName(name, context.config)
         }
+        // 不传组件，视为获取组件
         if (!component) {
           return context.components[name]
         }
+        // 判断是否重复注册
         if (__DEV__ && context.components[name]) {
           warn(`Component "${name}" has already been registered in target app.`)
         }
+        // 注册组件
         context.components[name] = component
         return app
       },
 
       directive(name: string, directive?: Directive) {
         if (__DEV__) {
+          // 开发环境 校验指令名称合法性
           validateDirectiveName(name)
         }
-
+        // 不传指令，视为获取指令
         if (!directive) {
           return context.directives[name] as any
         }
+        // 判断是否重复注册
         if (__DEV__ && context.directives[name]) {
           warn(`Directive "${name}" has already been registered in target app.`)
         }
+        // 注册指令
         context.directives[name] = directive
         return app
       },

@@ -131,21 +131,32 @@ export type DirectiveArguments = Array<
 
 /**
  * Adds directives to a VNode.
+ *
+ *
+ * `withDirectives`所做的就是将`DirectiveArguments`转化成`DirectiveBinding`，
+ * 我们再回看`withDirectives`的逻辑处理，先会对`app.directive()`的指令参数进行标准化处理，
+ * 然后将指令信息全部转化成`bindings`并存储在`VNode.dirs`。
  */
 export function withDirectives<T extends VNode>(
   vnode: T,
   directives: DirectiveArguments,
 ): T {
+  // 渲染实例  // 只能在render函数中使用
   if (currentRenderingInstance === null) {
     __DEV__ && warn(`withDirectives can only be used inside render functions.`)
     return vnode
   }
+
+  // 实例公共代理
   const instance = getComponentPublicInstance(currentRenderingInstance)
+  // 拿到已处理的所有指令信息
   const bindings: DirectiveBinding[] = vnode.dirs || (vnode.dirs = [])
+  // 遍历标准化指令绑定信息
   for (let i = 0; i < directives.length; i++) {
     let [dir, value, arg, modifiers = EMPTY_OBJ] = directives[i]
     if (dir) {
       if (isFunction(dir)) {
+        // 指令注册时直接传递钩子函数处理为mounted和updated
         dir = {
           mounted: dir,
           updated: dir,
@@ -154,6 +165,7 @@ export function withDirectives<T extends VNode>(
       if (dir.deep) {
         traverse(value)
       }
+      // 创建binding参数
       bindings.push({
         dir,
         instance,

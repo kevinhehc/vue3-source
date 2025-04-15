@@ -88,6 +88,7 @@ export const isReservedProp: (key: string) => boolean = /*@__PURE__*/ makeMap(
     'onVnodeBeforeUnmount,onVnodeUnmounted',
 )
 
+// 内建指令
 export const isBuiltInDirective: (key: string) => boolean =
   /*@__PURE__*/ makeMap(
     'bind,cloak,else-if,else,for,html,if,model,on,once,pre,show,slot,text,memo',
