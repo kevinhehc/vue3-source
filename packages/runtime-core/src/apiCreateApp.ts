@@ -31,21 +31,28 @@ import { ErrorCodes, callWithAsyncErrorHandling } from './errorHandling'
 import type { DefineComponent } from './apiDefineComponent'
 
 export interface App<HostElement = any> {
+  // 版本信息
   version: string
+  // 全局的app配置
   config: AppConfig
-
+  // 插件use方法
   use<Options extends unknown[]>(
     plugin: Plugin<Options>,
     ...options: NoInfer<Options>
   ): this
   use<Options>(plugin: Plugin<Options>, options: NoInfer<Options>): this
-
+  // 混入方法
   mixin(mixin: ComponentOptions): this
+  // 组件相关函数重载
+  // 获取
   component(name: string): Component | undefined
+  // 注册
   component<T extends Component | DefineComponent>(
     name: string,
     component: T,
   ): this
+  // 指令相关函数重载
+  // 获取
   directive<
     HostElement = any,
     Value = any,
@@ -54,6 +61,7 @@ export interface App<HostElement = any> {
   >(
     name: string,
   ): Directive<HostElement, Value, Modifiers, Arg> | undefined
+  // 注册
   directive<
     HostElement = any,
     Value = any,
@@ -63,6 +71,7 @@ export interface App<HostElement = any> {
     name: string,
     directive: Directive<HostElement, Value, Modifiers, Arg>,
   ): this
+  // 挂载方法
   mount(
     rootContainer: HostElement | string,
     /**
@@ -78,8 +87,10 @@ export interface App<HostElement = any> {
      */
     vnode?: VNode,
   ): ComponentPublicInstance
+  // 卸载方法
   unmount(): void
   onUnmount(cb: () => void): void
+  // 注入方法
   provide<T, K = InjectionKey<T> | string | number>(
     key: K,
     value: K extends InjectionKey<infer V> ? V : T,
@@ -95,9 +106,13 @@ export interface App<HostElement = any> {
 
   // internal, but we need to expose these for the server-renderer and devtools
   _uid: number
+  // 根组件
   _component: ConcreteComponent
+  // 根组件props
   _props: Data | null
+  // 挂载容器
   _container: HostElement | null
+  // app上下文
   _context: AppContext
   _instance: ComponentInternalInstance | null
 
@@ -223,19 +238,30 @@ export type Plugin<
 
 export function createAppContext(): AppContext {
   return {
+    // app实例
     app: null as any,
+    // 全局配置
     config: {
+      // 是否为原生标签
       isNativeTag: NO,
       performance: false,
+      // 全局属性
       globalProperties: {},
+      // 配置合并策略
       optionMergeStrategies: {},
+      // 错误处理函数
       errorHandler: undefined,
+      // 警告处理函数
       warnHandler: undefined,
       compilerOptions: {},
     },
+    // 全局混入
     mixins: [],
+    // 全局组件
     components: {},
+    // 全局指令
     directives: {},
+    // 全局注入
     provides: Object.create(null),
     optionsCache: new WeakMap(),
     propsCache: new WeakMap(),
@@ -254,6 +280,7 @@ export function createAppAPI<HostElement>(
   render: RootRenderFunction<HostElement>,
   hydrate?: RootHydrateFunction,
 ): CreateAppFunction<HostElement> {
+  // 再次返回一个函数，是为了通过柯里化的技巧将render函数以及hydrate参数持有，避免了用户在应用需要传入render函数给createApp
   return function createApp(rootComponent, rootProps = null) {
     if (!isFunction(rootComponent)) {
       rootComponent = extend({}, rootComponent)
@@ -264,12 +291,17 @@ export function createAppAPI<HostElement>(
       rootProps = null
     }
 
+    // 创建app上下文
     const context = createAppContext()
+    // 创建插件安装set
     const installedPlugins = new WeakSet()
     const pluginCleanupFns: Array<() => any> = []
 
+    // 是否挂载
     let isMounted = false
 
+    // 通过对象字面量俩创建app实例
+    // 实现了上文app实例的接口
     const app: App = (context.app = {
       _uid: uid++,
       _component: rootComponent as ConcreteComponent,

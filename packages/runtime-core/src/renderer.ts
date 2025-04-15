@@ -108,6 +108,7 @@ export interface RendererOptions<
   HostNode = RendererNode,
   HostElement = RendererElement,
 > {
+  // diffprops的函数
   patchProp(
     el: HostElement,
     key: string,
@@ -116,23 +117,35 @@ export interface RendererOptions<
     namespace?: ElementNamespace,
     parentComponent?: ComponentInternalInstance | null,
   ): void
+  // 插入方法
   insert(el: HostNode, parent: HostElement, anchor?: HostNode | null): void
+  // 移除方法
   remove(el: HostNode): void
+  // 创建元素方法
   createElement(
     type: string,
     namespace?: ElementNamespace,
     isCustomizedBuiltIn?: string,
     vnodeProps?: (VNodeProps & { [key: string]: any }) | null,
   ): HostElement
+  // 创建文本方法
   createText(text: string): HostNode
+  // 创建注释方法
   createComment(text: string): HostNode
+  // 设置文本方法
   setText(node: HostNode, text: string): void
+  // 设置元素文本内容方法
   setElementText(node: HostElement, text: string): void
+  // 查找父元素的方法
   parentNode(node: HostNode): HostElement | null
+  // 查找下一个兄弟元素的方法
   nextSibling(node: HostNode): HostNode | null
+  // 静态选择器
   querySelector?(selector: string): HostElement | null
   setScopeId?(el: HostElement, id: string): void
+  // 克隆元素
   cloneNode?(node: HostNode): HostNode
+  // 插入静态节点的方法
   insertStaticContent?(
     content: string,
     parent: HostElement,
@@ -353,6 +366,7 @@ function baseCreateRenderer(
     setDevtoolsHook(target.__VUE_DEVTOOLS_GLOBAL_HOOK__, target)
   }
 
+  // 从options中拿出宿主平台的api
   const {
     insert: hostInsert,
     remove: hostRemove,
@@ -2366,6 +2380,7 @@ function baseCreateRenderer(
   }
 
   let isFlushing = false
+  // 创建渲染函数
   const render: RootRenderFunction = (vnode, container, namespace) => {
     if (vnode == null) {
       if (container._vnode) {
@@ -2411,7 +2426,7 @@ function baseCreateRenderer(
       internals as RendererInternals<Node, Element>,
     )
   }
-
+  // 返回渲染器对象
   return {
     render,
     hydrate,
