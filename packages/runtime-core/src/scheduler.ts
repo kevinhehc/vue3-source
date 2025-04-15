@@ -201,7 +201,9 @@ export function flushPostFlushCbs(seen?: CountMap): void {
       if (cb.flags! & SchedulerJobFlags.ALLOW_RECURSE) {
         cb.flags! &= ~SchedulerJobFlags.QUEUED
       }
-      if (!(cb.flags! & SchedulerJobFlags.DISPOSED)) cb()
+      if (!(cb.flags! & SchedulerJobFlags.DISPOSED))
+        // 这里会执行
+        cb()
       cb.flags! &= ~SchedulerJobFlags.QUEUED
     }
     // 重置信息
