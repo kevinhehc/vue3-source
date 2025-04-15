@@ -608,35 +608,55 @@ export function createComponentInstance(
 ): ComponentInternalInstance {
   const type = vnode.type as ConcreteComponent
   // inherit parent app context - or - if root, adopt from root vnode
+  // 继承自父组件的appContext，如果是根组件VNode从根VNode中取得
   const appContext =
     (parent ? parent.appContext : vnode.appContext) || emptyAppContext
 
+  // 通过对象字面量创建instance
+  // 该函数主要是通过对象字面量来创建`instance`，然后返回；逻辑并没有复杂的点，我们主要聚焦在`instance`的`interface`来了解组件实例都包含了一些什么属性。
   const instance: ComponentInternalInstance = {
+    // 组件唯一id
     uid: uid++,
+    // 组件对应VNode 代替组件存在父亲的vdom树中
     vnode,
+    // 组件options
     type,
+    // 父组件实例
     parent,
+    // 根组件上下文
     appContext,
+    // 根组件实例
     root: null!, // to be immediately set
+    // 来自父亲更新时生成的下一个状态的VNode 内部属性
     next: null,
+    // 以当前组件VNode为根的vdom子树
     subTree: null!, // will be set synchronously right after creation
+    // 收集与该组件相关的副作用，便于在卸载的时候清除 内部属性
     effect: null!,
+    // 带副作用的渲染函数
     update: null!, // will be set synchronously right after creation
     job: null!,
     scope: new EffectScope(true /* detached */),
+    // 渲染生成vdom树的函数 内部属性
     render: null,
+    // 组件代理相关
     proxy: null,
     exposed: null,
     exposeProxy: null,
     withProxy: null,
 
+    // 注入数据 内部属性
     provides: parent ? parent.provides : Object.create(appContext.provides),
     ids: parent ? parent.ids : ['', 0, 0],
+    // 缓存代理访问类型 内部属性
     accessCache: null!,
+    // 渲染函数缓存优化相关 内部属性
     renderCache: [],
 
     // local resolved assets
+    // 组件级组件注册表 原型指向根组件的组件注册表方便快速访问全局注册组件 内部属性
     components: null,
+    // 注册指令表
     directives: null,
 
     // resolved props and emits options
@@ -645,6 +665,7 @@ export function createComponentInstance(
 
     // emit
     emit: null!, // to be set immediately
+    // 收集带 .once的emit事件
     emitted: null,
 
     // props default value
@@ -654,6 +675,7 @@ export function createComponentInstance(
     inheritAttrs: type.inheritAttrs,
 
     // state
+    // 内部状态
     ctx: EMPTY_OBJ,
     data: EMPTY_OBJ,
     props: EMPTY_OBJ,
@@ -664,6 +686,7 @@ export function createComponentInstance(
     setupContext: null,
 
     // suspense related
+    // suspense相关
     suspense,
     suspenseId: suspense ? suspense.pendingId : 0,
     asyncDep: null,
@@ -671,6 +694,7 @@ export function createComponentInstance(
 
     // lifecycle hooks
     // not using enums here because it results in computed properties
+    // 生命周期相关标识
     isMounted: false,
     isUnmounted: false,
     isDeactivated: false,
@@ -804,6 +828,7 @@ export function setupComponent(
   isSSR && setInSSRSetupState(isSSR)
 
   const { props, children } = instance.vnode
+  // 是否是包含状态的组件
   const isStateful = isStatefulComponent(instance)
 
   // 初始化props
@@ -812,6 +837,7 @@ export function setupComponent(
   initSlots(instance, children, optimized)
 
   // 执行setup
+  // 如果是包含状态的函数，就执行状态函数得到状态
   const setupResult = isStateful
     ? setupStatefulComponent(instance, isSSR)
     : undefined

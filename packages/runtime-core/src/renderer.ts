@@ -385,9 +385,13 @@ function baseCreateRenderer(
   // Note: functions inside this closure should use `const xxx = () => {}`
   // style in order to prevent being inlined by minifiers.
   const patch: PatchFn = (
+    // 旧VNode
     n1,
+    // 新VNode
     n2,
+    // 挂载容器
     container,
+    // 调用web dom API的insertBefore时传递的相对节点
     anchor = null,
     parentComponent = null,
     parentSuspense = null,
@@ -400,7 +404,9 @@ function baseCreateRenderer(
     }
 
     // patching & not same type, unmount old tree
+    // 判断不是同一个VNode直接卸载旧的子树
     if (n1 && !isSameVNodeType(n1, n2)) {
+      // 获取插入的标识位
       anchor = getNextHostNode(n1)
       unmount(n1, parentComponent, parentSuspense, true)
       n1 = null
@@ -411,15 +417,19 @@ function baseCreateRenderer(
       n2.dynamicChildren = null
     }
 
+    // 取出关键信息
     const { type, ref, shapeFlag } = n2
     switch (type) {
       case Text:
+        // 处理文本节点...
         processText(n1, n2, container, anchor)
         break
       case Comment:
+        // 处理注释节点...
         processCommentNode(n1, n2, container, anchor)
         break
       case Static:
+        // 处理静态节点...
         if (n1 == null) {
           mountStaticNode(n2, container, anchor, namespace)
         } else if (__DEV__) {
@@ -427,6 +437,7 @@ function baseCreateRenderer(
         }
         break
       case Fragment:
+        // 处理fragment ...
         processFragment(
           n1,
           n2,
@@ -440,7 +451,9 @@ function baseCreateRenderer(
         )
         break
       default:
+        // 判断VNode类型
         if (shapeFlag & ShapeFlags.ELEMENT) {
+          // 处理元素节点
           processElement(
             n1,
             n2,
@@ -453,6 +466,7 @@ function baseCreateRenderer(
             optimized,
           )
         } else if (shapeFlag & ShapeFlags.COMPONENT) {
+          // 处理组件
           processComponent(
             n1,
             n2,
@@ -465,6 +479,7 @@ function baseCreateRenderer(
             optimized,
           )
         } else if (shapeFlag & ShapeFlags.TELEPORT) {
+          // 处理 teleport组件
           ;(type as typeof TeleportImpl).process(
             n1 as TeleportVNode,
             n2 as TeleportVNode,
@@ -478,6 +493,7 @@ function baseCreateRenderer(
             internals,
           )
         } else if (__FEATURE_SUSPENSE__ && shapeFlag & ShapeFlags.SUSPENSE) {
+          // 处理suspense组件
           ;(type as typeof SuspenseImpl).process(
             n1,
             n2,
@@ -621,6 +637,7 @@ function baseCreateRenderer(
     }
 
     if (n1 == null) {
+      // 挂载元素
       mountElement(
         n2,
         container,
@@ -632,6 +649,7 @@ function baseCreateRenderer(
         optimized,
       )
     } else {
+      // 更新元素
       patchElement(
         n1,
         n2,
@@ -658,6 +676,7 @@ function baseCreateRenderer(
     let vnodeHook: VNodeHook | undefined | null
     const { props, shapeFlag, transition, dirs } = vnode
 
+    // 创建div元素
     el = vnode.el = hostCreateElement(
       vnode.type as string,
       namespace,
@@ -667,9 +686,11 @@ function baseCreateRenderer(
 
     // mount children first, since some props may rely on child content
     // being already rendered, e.g. `<select value>`
+    // 文本节点的children
     if (shapeFlag & ShapeFlags.TEXT_CHILDREN) {
       hostSetElementText(el, vnode.children as string)
     } else if (shapeFlag & ShapeFlags.ARRAY_CHILDREN) {
+      // 数组型的children
       mountChildren(
         vnode.children as VNodeArrayChildren,
         el,
@@ -689,6 +710,7 @@ function baseCreateRenderer(
     // scopeId
     setScopeId(el, vnode, vnode.scopeId, slotScopeIds, parentComponent)
     // props
+    // 设置props
     if (props) {
       for (const key in props) {
         if (key !== 'value' && !isReservedProp(key)) {
@@ -727,6 +749,7 @@ function baseCreateRenderer(
     if (needCallTransitionHooks) {
       transition!.beforeEnter(el)
     }
+    // 插入到容器元素中
     hostInsert(el, container, anchor)
     if (
       (vnodeHook = props && props.onVnodeMounted) ||
@@ -1166,6 +1189,7 @@ function baseCreateRenderer(
           optimized,
         )
       } else {
+        // 挂载组件
         mountComponent(
           n2,
           container,
@@ -1177,6 +1201,7 @@ function baseCreateRenderer(
         )
       }
     } else {
+      // 更新组件
       updateComponent(n1, n2, optimized)
     }
   }
@@ -1192,6 +1217,7 @@ function baseCreateRenderer(
   ) => {
     // 2.x compat may pre-create the component instance before actually
     // mounting
+    // 创建组件实例
     const compatMountInstance =
       __COMPAT__ && initialVNode.isCompatRoot && initialVNode.component
     const instance: ComponentInternalInstance =
@@ -1221,6 +1247,7 @@ function baseCreateRenderer(
       if (__DEV__) {
         startMeasure(instance, `init`)
       }
+      // 启动组件
       setupComponent(instance, false, optimized)
       if (__DEV__) {
         endMeasure(instance, `init`)
@@ -1229,6 +1256,7 @@ function baseCreateRenderer(
 
     // setup() is async. This component relies on async logic to be resolved
     // before proceeding
+    // setup函数为异步的相关处理 忽略相关逻辑
     if (__FEATURE_SUSPENSE__ && instance.asyncDep) {
       // avoid hydration for hmr updating
       if (__DEV__ && isHmrUpdating) initialVNode.el = null
@@ -1243,6 +1271,7 @@ function baseCreateRenderer(
         processCommentNode(null, placeholder, container!, anchor)
       }
     } else {
+      // 启动带副作用的render函数
       setupRenderEffect(
         instance,
         initialVNode,
@@ -1373,6 +1402,7 @@ function baseCreateRenderer(
           if (__DEV__) {
             startMeasure(instance, `render`)
           }
+          // 以当前组件为根渲染子节点
           const subTree = (instance.subTree = renderComponentRoot(instance))
           if (__DEV__) {
             endMeasure(instance, `render`)
@@ -1380,6 +1410,7 @@ function baseCreateRenderer(
           if (__DEV__) {
             startMeasure(instance, `patch`)
           }
+          // patch子树
           patch(
             null,
             subTree,
@@ -1392,6 +1423,7 @@ function baseCreateRenderer(
           if (__DEV__) {
             endMeasure(instance, `patch`)
           }
+          // 挂载后处理
           initialVNode.el = subTree.el
         }
         // mounted hook
@@ -2384,9 +2416,11 @@ function baseCreateRenderer(
   const render: RootRenderFunction = (vnode, container, namespace) => {
     if (vnode == null) {
       if (container._vnode) {
+        // 无新的vnode入参 则代表是卸载
         unmount(container._vnode, null, null, true)
       }
     } else {
+      // 挂载分支
       patch(
         container._vnode || null,
         vnode,
@@ -2397,9 +2431,11 @@ function baseCreateRenderer(
         namespace,
       )
     }
+    // 保存当前渲染完毕的根VNode在容器上
     container._vnode = vnode
     if (!isFlushing) {
       isFlushing = true
+      // 执行postFlush任务队列
       flushPreFlushCbs()
       flushPostFlushCbs()
       isFlushing = false

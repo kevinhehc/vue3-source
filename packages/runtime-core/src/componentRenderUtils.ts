@@ -45,6 +45,7 @@ type SetRootFn = ((root: VNode) => void) | undefined
 export function renderComponentRoot(
   instance: ComponentInternalInstance,
 ): VNode {
+  // 获取相关信息
   const {
     type: Component,
     vnode,
@@ -62,6 +63,7 @@ export function renderComponentRoot(
     ctx,
     inheritAttrs,
   } = instance
+  // 设置渲染实例
   const prev = setCurrentRenderingInstance(instance)
 
   let result
@@ -71,9 +73,11 @@ export function renderComponentRoot(
   }
 
   try {
+    // 带状态的组件
     if (vnode.shapeFlag & ShapeFlags.STATEFUL_COMPONENT) {
       // withProxy is a proxy with a different `has` trap only for
       // runtime-compiled render functions using `with` block.
+      // 获取渲染代理
       const proxyToUse = withProxy || proxy
       // 'this' isn't available in production builds with `<script setup>`,
       // so warn if it's used in dev.
@@ -90,6 +94,7 @@ export function renderComponentRoot(
               },
             })
           : proxyToUse
+      // 执行render函数
       result = normalizeVNode(
         render!.call(
           thisProxy,
@@ -104,12 +109,15 @@ export function renderComponentRoot(
       fallthroughAttrs = attrs
     } else {
       // functional
+      // 函数式组件
       const render = Component as FunctionalComponent
       // in dev, mark attrs accessed if optional props (attrs === props)
       if (__DEV__ && attrs === props) {
         markAttrsAccessed()
       }
+      // 直接执行组件函数
       result = normalizeVNode(
+        // 查看是否需要第二个参数
         render.length > 1
           ? render(
               __DEV__ ? shallowReadonly(props) : props,

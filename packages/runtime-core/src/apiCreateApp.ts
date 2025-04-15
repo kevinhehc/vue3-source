@@ -408,9 +408,11 @@ export function createAppAPI<HostElement>(
                 ` you need to unmount the previous app by calling \`app.unmount()\` first.`,
             )
           }
+          // 创建根组件Vnode
           const vnode = app._ceVNode || createVNode(rootComponent, rootProps)
           // store app context on the root VNode.
           // this will be set on the root instance on initial mount.
+          // 根组件Vnode 拥有 根app上下文
           vnode.appContext = context
 
           if (namespace === true) {
@@ -424,6 +426,7 @@ export function createAppAPI<HostElement>(
             context.reload = () => {
               // casting to ElementNamespace because TS doesn't guarantee type narrowing
               // over function boundaries
+              // 从根组件Vnode开始渲染
               render(
                 cloneVNode(vnode),
                 rootContainer,
@@ -437,7 +440,9 @@ export function createAppAPI<HostElement>(
           } else {
             render(vnode, rootContainer, namespace)
           }
+          // 标识已挂载
           isMounted = true
+          // 绑定根实例和根容器
           app._container = rootContainer
           // for devtools and telemetry
           ;(rootContainer as any).__vue_app__ = app
@@ -447,6 +452,7 @@ export function createAppAPI<HostElement>(
             devtoolsInitApp(app, version)
           }
 
+          // 返回根组件的代理
           return getComponentPublicInstance(vnode.component!)
         } else if (__DEV__) {
           warn(

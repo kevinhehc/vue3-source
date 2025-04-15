@@ -165,21 +165,27 @@ export interface VNode<
   /**
    * @internal
    */
+  // 是否为Vnode对象的标识
   __v_isVNode: true
 
   /**
    * @internal
    */
+  // 跳过reactivity的标识
   [ReactiveFlags.SKIP]: true
 
+  // vnode类型标识
   type: VNodeTypes
+  // vnode props
   props: (VNodeProps & ExtraProps) | null
+  // vnode的唯一key值
   key: PropertyKey | null
   ref: VNodeNormalizedRef | null
   /**
    * SFC only. This is assigned on vnode creation using currentScopeId
    * which is set alongside currentRenderingInstance.
    */
+  // SFC only
   scopeId: string | null
   /**
    * SFC only. This is assigned to:
@@ -190,15 +196,20 @@ export interface VNode<
    */
   slotScopeIds: string[] | null
   children: VNodeNormalizedChildren
+  // 对应组件实例
   component: ComponentInternalInstance | null
   dirs: DirectiveBinding[] | null
   transition: TransitionHooks<HostElement> | null
 
   // DOM
+  // vnode对应元素 组件vnode则对应 挂载容器
   el: HostNode | null
+  // 相对锚点
   anchor: HostNode | null // fragment anchor
+  // teleport组件的渲染目标元素
   target: HostElement | null // teleport target
   targetStart: HostNode | null // teleport target start anchor
+  // teleport组件的渲染目标元素相对锚点
   targetAnchor: HostNode | null // teleport target anchor
   /**
    * number of elements contained in a static vnode
@@ -218,18 +229,24 @@ export interface VNode<
   ssFallback: VNode | null
 
   // optimization only
+  // vnode 优化标识
   shapeFlag: number
+  // patch 标识
   patchFlag: number
   /**
    * @internal
    */
+  // block优化下的效果：
+  // 扁平的动态props
   dynamicProps: string[] | null
   /**
    * @internal
    */
+  // 扁平的动态子节点
   dynamicChildren: (VNode[] & { hasOnce?: boolean }) | null
 
   // application root node only
+  // 只有根组件拥有app上下文
   appContext: AppContext | null
 
   /**
@@ -492,6 +509,7 @@ function createBaseVNode(
   } as VNode
 
   if (needFullChildrenNormalization) {
+    // 标准化子节点---> 确定children的类型，标准化children成数组形态、插槽形态或者string、null
     normalizeChildren(vnode, children)
     // normalize suspense children
     if (__FEATURE_SUSPENSE__ && shapeFlag & ShapeFlags.SUSPENSE) {
@@ -588,6 +606,7 @@ function _createVNode(
   }
 
   // class & style normalization.
+  // 标准化 class & style
   if (props) {
     // for reactive or proxy objects, we need to clone it to enable mutation.
     props = guardReactiveProps(props)!
@@ -606,6 +625,7 @@ function _createVNode(
   }
 
   // encode the vnode type information into a bitmap
+  // VNode形态编码 来自枚举类ShapFlags
   const shapeFlag = isString(type)
     ? ShapeFlags.ELEMENT
     : __FEATURE_SUSPENSE__ && isSuspense(type)
