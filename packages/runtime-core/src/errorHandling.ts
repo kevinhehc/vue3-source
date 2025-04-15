@@ -121,11 +121,14 @@ export function handleError(
   if (instance) {
     let cur = instance.parent
     // the exposed instance is the render proxy to keep it consistent with 2.x
+    // 暴露render代理实例，和2.x保持一致
     const exposedInstance = instance.proxy
     // in production the hook receives only the error code
+    // 开发环境需要更加详细的错误类型信息
     const errorInfo = __DEV__
       ? ErrorTypeStrings[type]
       : `https://vuejs.org/error-reference/#runtime-${type}`
+    // 从当前发生异常组件的父组件一直向上冒泡执行errorCapturedHooks
     while (cur) {
       const errorCapturedHooks = cur.ec
       if (errorCapturedHooks) {
@@ -140,6 +143,7 @@ export function handleError(
       cur = cur.parent
     }
     // app-level handling
+    // app级别的处理
     if (errorHandler) {
       pauseTracking()
       callWithErrorHandling(errorHandler, null, ErrorCodes.APP_ERROR_HANDLER, [
@@ -151,6 +155,7 @@ export function handleError(
       return
     }
   }
+  // 警告日志
   logError(err, type, contextVNode, throwInDev, throwUnhandledErrorInProduction)
 }
 
