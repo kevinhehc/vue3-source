@@ -669,6 +669,7 @@ function baseCreateRenderer(
     }
 
     if (dirs) {
+      // invokeDirectiveHook
       invokeDirectiveHook(vnode, null, parentComponent, 'created')
     }
     // scopeId
@@ -703,6 +704,7 @@ function baseCreateRenderer(
     }
 
     if (dirs) {
+      // invokeDirectiveHook
       invokeDirectiveHook(vnode, null, parentComponent, 'beforeMount')
     }
     // #1583 For inside suspense + suspense not resolved case, enter hook should call when suspense resolved
@@ -720,6 +722,7 @@ function baseCreateRenderer(
       queuePostRenderEffect(() => {
         vnodeHook && invokeVNodeHook(vnodeHook, parentComponent, vnode)
         needCallTransitionHooks && transition!.enter(el)
+        // invokeDirectiveHook
         dirs && invokeDirectiveHook(vnode, null, parentComponent, 'mounted')
       }, parentSuspense)
     }
@@ -823,6 +826,7 @@ function baseCreateRenderer(
       invokeVNodeHook(vnodeHook, parentComponent, n2, n1)
     }
     if (dirs) {
+      // invokeDirectiveHook
       invokeDirectiveHook(n2, n1, parentComponent, 'beforeUpdate')
     }
     parentComponent && toggleRecurse(parentComponent, true)
@@ -931,6 +935,7 @@ function baseCreateRenderer(
     if ((vnodeHook = newProps.onVnodeUpdated) || dirs) {
       queuePostRenderEffect(() => {
         vnodeHook && invokeVNodeHook(vnodeHook, parentComponent, n2, n1)
+        // invokeDirectiveHook
         dirs && invokeDirectiveHook(n2, n1, parentComponent, 'updated')
       }, parentSuspense)
     }
@@ -2131,6 +2136,7 @@ function baseCreateRenderer(
       }
 
       if (shouldInvokeDirs) {
+        // invokeDirectiveHook
         invokeDirectiveHook(vnode, null, parentComponent, 'beforeUnmount')
       }
 
@@ -2184,6 +2190,7 @@ function baseCreateRenderer(
       queuePostRenderEffect(() => {
         vnodeHook && invokeVNodeHook(vnodeHook, parentComponent, vnode)
         shouldInvokeDirs &&
+          // invokeDirectiveHook
           invokeDirectiveHook(vnode, null, parentComponent, 'unmounted')
       }, parentSuspense)
     }

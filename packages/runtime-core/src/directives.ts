@@ -66,6 +66,7 @@ export interface ObjectDirective<
   Modifiers extends string = string,
   Arg extends string = string,
 > {
+  // 指令声明时可用hooks
   /**
    * @internal without this, ts-expect-error in directives.test-d.ts somehow
    * fails when running tsc, but passes in IDE and when testing against built
@@ -102,6 +103,7 @@ export type FunctionDirective<
   Arg extends string = string,
 > = DirectiveHook<HostElement, any, V, Modifiers, Arg>
 
+// 指令注册时可接受的方式
 export type Directive<
   HostElement = any,
   Value = any,
