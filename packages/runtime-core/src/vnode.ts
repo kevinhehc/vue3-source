@@ -815,12 +815,15 @@ export function normalizeChildren(vnode: VNode, children: unknown): void {
   let type = 0
   const { shapeFlag } = vnode
   if (children == null) {
+    // 无children
     children = null
   } else if (isArray(children)) {
+    // 数组型的children
     type = ShapeFlags.ARRAY_CHILDREN
   } else if (typeof children === 'object') {
     if (shapeFlag & (ShapeFlags.ELEMENT | ShapeFlags.TELEPORT)) {
       // Normalize slot to plain children for plain element and Teleport
+      // teleport 的情况
       const slot = (children as any).default
       if (slot) {
         // _c marker is added by withCtx() indicating this is a compiled slot
@@ -831,14 +834,17 @@ export function normalizeChildren(vnode: VNode, children: unknown): void {
       return
     } else {
       type = ShapeFlags.SLOTS_CHILDREN
+      // 去除插槽类型
       const slotFlag = (children as RawSlots)._
       if (!slotFlag && !isInternalObject(children)) {
         // if slots are not normalized, attach context instance
         // (compiled / normalized slots already have context)
+        // 未标准化的插槽 需要附加上ctx
         ;(children as RawSlots)._ctx = currentRenderingInstance
       } else if (slotFlag === SlotFlags.FORWARDED && currentRenderingInstance) {
         // a child component receives forwarded slots from the parent.
         // its slot type is determined by its parent's slot type.
+        // 透传插槽的情况  需要取决于父组件插槽的`SlotFlags`
         if (
           (currentRenderingInstance.slots as RawSlots)._ === SlotFlags.STABLE
         ) {
@@ -850,10 +856,12 @@ export function normalizeChildren(vnode: VNode, children: unknown): void {
       }
     }
   } else if (isFunction(children)) {
+    // 函数children 转成插槽对象
     children = { default: children, _ctx: currentRenderingInstance }
     type = ShapeFlags.SLOTS_CHILDREN
   } else {
     children = String(children)
+    // 强制最为字符children处理
     // force teleport children to array so it can be moved around
     if (shapeFlag & ShapeFlags.TELEPORT) {
       type = ShapeFlags.ARRAY_CHILDREN
@@ -862,7 +870,9 @@ export function normalizeChildren(vnode: VNode, children: unknown): void {
       type = ShapeFlags.TEXT_CHILDREN
     }
   }
+  // 保存children
   vnode.children = children as VNodeNormalizedChildren
+  // 添加新的patchFlag标记
   vnode.shapeFlag |= type
 }
 

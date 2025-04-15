@@ -122,6 +122,7 @@ const normalizeObjectSlots = (
     if (isInternalKey(key)) continue
     const value = rawSlots[key]
     if (isFunction(value)) {
+      // 使用withCtx来保存ctx
       slots[key] = normalizeSlot(key, value, ctx)
     } else if (value != null) {
       if (
@@ -136,6 +137,7 @@ const normalizeObjectSlots = (
             `Prefer function slots for better performance.`,
         )
       }
+      // 非函数插槽 转化成函数插槽
       const normalized = normalizeSlotValue(value)
       slots[key] = () => normalized
     }
@@ -185,9 +187,11 @@ export const initSlots = (
   if (instance.vnode.shapeFlag & ShapeFlags.SLOTS_CHILDREN) {
     const type = (children as RawSlots)._
     if (type) {
+      // 直接将slots 赋值为 children
       assignSlots(slots, children as Slots, optimized)
       // make compiler marker non-enumerable
       if (optimized) {
+        // 内部标记不可枚举 通过def设置为不可枚举
         def(slots, '_', type, true)
       }
     } else {
@@ -210,6 +214,7 @@ export const updateSlots = (
     const type = (children as RawSlots)._
     if (type) {
       // compiled slots.
+      // 编译的插槽
       if (__DEV__ && isHmrUpdating) {
         // Parent was HMR updated so slot content may have changed.
         // force update slots and mark instance for hmr as well
@@ -218,6 +223,7 @@ export const updateSlots = (
       } else if (optimized && type === SlotFlags.STABLE) {
         // compiled AND stable.
         // no need to update, and skip stale slots removal.
+        // 稳定的插槽不需要更新
         needDeletionCheck = false
       } else {
         // compiled but dynamic (v-if/v-for on slots) - update slots, but skip
@@ -225,19 +231,27 @@ export const updateSlots = (
         assignSlots(slots, children as Slots, optimized)
       }
     } else {
+      // 稳定的插槽不会进行更改，不需要删除
       needDeletionCheck = !(children as RawSlots).$stable
+      // 规范化插槽
       normalizeObjectSlots(children as RawSlots, slots, instance)
     }
+    // 保存新的插槽信息
     deletionComparisonTarget = children as RawSlots
   } else if (children) {
+    // 没有插槽对象作为children 而是直接注入children到组件中
+    // 将其规范化成default插槽位
     // non slot object children (direct value) passed to a component
     normalizeVNodeSlots(instance, children)
+    // 除了default 其他的插槽位全部删除
     deletionComparisonTarget = { default: 1 }
   }
 
   // delete stale slots
+  // 删除变更的插槽
   if (needDeletionCheck) {
     for (const key in slots) {
+      // 不在新的插槽中直接删除
       if (!isInternalKey(key) && deletionComparisonTarget[key] == null) {
         delete slots[key]
       }

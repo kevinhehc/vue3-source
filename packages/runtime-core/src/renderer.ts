@@ -1595,7 +1595,7 @@ function baseCreateRenderer(
     instance.next = null
     // 更新props
     updateProps(instance, nextVNode.props, prevProps, optimized)
-    // 更新插槽
+    // 更新插槽slots
     updateSlots(instance, nextVNode.children, optimized)
 
     pauseTracking()

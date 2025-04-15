@@ -52,6 +52,7 @@ export function renderSlot(
     )
   }
 
+  // 取出相应的插槽渲染函数
   let slot = slots[name]
 
   if (__DEV__ && slot && slot.length > 1) {
@@ -77,14 +78,18 @@ export function renderSlot(
     // slot content array of a dynamic conditional slot may have a branch
     // key attached in the `createSlots` helper, respect that
     (validSlotContent && (validSlotContent as any).key)
+
   const rendered = createBlock(
+    // 创建一个fragment
     Fragment,
+
     {
       key:
         (slotKey && !isSymbol(slotKey) ? slotKey : `_${name}`) +
         // #7256 force differentiate fallback content from actual content
         (!validSlotContent && fallback ? '_fb' : ''),
     },
+    // 执行slot渲染函数获取子元素
     validSlotContent || (fallback ? fallback() : []),
     validSlotContent && (slots as RawSlots)._ === SlotFlags.STABLE
       ? PatchFlags.STABLE_FRAGMENT

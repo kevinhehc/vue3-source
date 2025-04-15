@@ -383,6 +383,7 @@ export function shouldUpdateComponent(
   }
 
   if (optimized && patchFlag >= 0) {
+    // 其他判断优化
     if (patchFlag & PatchFlags.DYNAMIC_SLOTS) {
       // slot content that references values that might have changed,
       // e.g. in a v-for

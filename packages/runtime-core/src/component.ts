@@ -808,6 +808,7 @@ export function setupComponent(
 
   // 初始化props
   initProps(instance, props, isStateful, isSSR)
+  // 初始化slots
   initSlots(instance, children, optimized)
 
   // 执行setup
