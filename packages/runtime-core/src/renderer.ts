@@ -481,7 +481,7 @@ function baseCreateRenderer(
         }
     }
 
-    // set ref
+    // set ref 阶段
     if (ref != null && parentComponent) {
       setRef(ref, n1 && n1.ref, parentSuspense, n2 || n1, !n2)
     }
@@ -2103,7 +2103,7 @@ function baseCreateRenderer(
       optimized = false
     }
 
-    // unset ref
+    // unset ref 阶段
     if (ref != null) {
       setRef(ref, null, parentSuspense, vnode, true)
     }

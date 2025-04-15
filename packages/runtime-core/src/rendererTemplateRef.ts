@@ -21,6 +21,7 @@ import { knownTemplateRefs } from './helpers/useTemplateRef'
 /**
  * Function for handling a template ref
  */
+
 export function setRef(
   rawRef: VNodeNormalizedRef,
   oldRawRef: VNodeNormalizedRef | null,
