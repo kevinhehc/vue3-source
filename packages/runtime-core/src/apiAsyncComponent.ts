@@ -24,17 +24,27 @@ export type AsyncComponentLoader<T = any> = () => Promise<
 >
 
 export interface AsyncComponentOptions<T = any> {
+  // 异步的组件
   loader: AsyncComponentLoader<T>
+  // 加载中的组件
   loadingComponent?: Component
+  // 错误时的组件
   errorComponent?: Component
+  // 延迟加载时长
   delay?: number
+  // 超时 时长
   timeout?: number
+  // 是否使用suspense
   suspensible?: boolean
   hydrate?: HydrationStrategy
+  // 出错时的回调
   onError?: (
     error: Error,
+    // 重试
     retry: () => void,
+    // 失败
     fail: () => void,
+    // 尝试加载的次数
     attempts: number,
   ) => any
 }
@@ -56,6 +66,7 @@ export function defineAsyncComponent<
     errorComponent,
     delay = 200,
     hydrate: hydrateStrategy,
+    // 超时为undefined时永不超时
     timeout, // undefined = never times out
     suspensible = true,
     onError: userOnError,
@@ -68,21 +79,28 @@ export function defineAsyncComponent<
   const retry = () => {
     retries++
     pendingRequest = null
+    // 清空重新加载
     return load()
   }
 
   const load = (): Promise<ConcreteComponent> => {
+    // 本次load调用的异步组件请求promise函数
     let thisRequest: Promise<ConcreteComponent>
     return (
+      // 存在正在进行的异步组件请求promise函数则直接返回
       pendingRequest ||
       (thisRequest = pendingRequest =
         loader()
           .catch(err => {
+            // 异常处理
+            // 创建错误信息
             err = err instanceof Error ? err : new Error(String(err))
             if (userOnError) {
+              // 存在用户的错误处理函数
               return new Promise((resolve, reject) => {
                 const userRetry = () => resolve(retry())
                 const userFail = () => reject(err)
+                // 调用用户错误处理函数
                 userOnError(err, userRetry, userFail, retries + 1)
               })
             } else {
@@ -90,7 +108,9 @@ export function defineAsyncComponent<
             }
           })
           .then((comp: any) => {
+            // 异步组件返回处理
             if (thisRequest !== pendingRequest && pendingRequest) {
+              // 本次异步组件请求和正在进行的异步组件请求不一致，且存在正在进行的异步组件请求，返回正在进行的异步组件请求
               return pendingRequest
             }
             if (__DEV__ && !comp) {
@@ -100,6 +120,7 @@ export function defineAsyncComponent<
               )
             }
             // interop module default
+            // 解析 esm 格式
             if (
               comp &&
               (comp.__esModule || comp[Symbol.toStringTag] === 'Module')
@@ -115,6 +136,9 @@ export function defineAsyncComponent<
     )
   }
 
+  // 1. 标准化source，创建相关方法变量
+  // 2. 创建load组件promise
+  // 3. 调用defineComponent
   return defineComponent({
     name: 'AsyncComponentWrapper',
 
@@ -218,13 +242,16 @@ export function defineAsyncComponent<
         })
 
       return () => {
+        // 加载完成
         if (loaded.value && resolvedComp) {
           return createInnerComp(resolvedComp, instance)
         } else if (error.value && errorComponent) {
+          // 渲染错误
           return createVNode(errorComponent, {
             error: error.value,
           })
         } else if (loadingComponent && !delayed.value) {
+          // 渲染加载中
           return createVNode(loadingComponent)
         }
       }
