@@ -386,24 +386,31 @@ export function shouldUpdateComponent(
   }
 
   // force child update for runtime directive or transition on component vnode.
+  // 包含指令和transition的需要更新
   if (nextVNode.dirs || nextVNode.transition) {
     return true
   }
 
+  // 优化模式
   if (optimized && patchFlag >= 0) {
     // 其他判断优化
     if (patchFlag & PatchFlags.DYNAMIC_SLOTS) {
       // slot content that references values that might have changed,
       // e.g. in a v-for
+      // 动态插槽情况
       return true
     }
     if (patchFlag & PatchFlags.FULL_PROPS) {
+      // 全量props的情况
       if (!prevProps) {
+        // 没有旧props ---> 由新props决定
         return !!nextProps
       }
       // presence of this flag indicates props are always non-null
+      // 都存在查询有无变化
       return hasPropsChanged(prevProps, nextProps!, emits)
     } else if (patchFlag & PatchFlags.PROPS) {
+      // 模板编译阶段优化 动态props
       const dynamicProps = nextVNode.dynamicProps!
       for (let i = 0; i < dynamicProps.length; i++) {
         const key = dynamicProps[i]
@@ -418,20 +425,25 @@ export function shouldUpdateComponent(
   } else {
     // this path is only taken by manually written render functions
     // so presence of any children leads to a forced update
+    // 手写render函数时未优化flags 以下任意场景都需要更新
     if (prevChildren || nextChildren) {
       if (!nextChildren || !(nextChildren as any).$stable) {
         return true
       }
     }
+    // props未改变
     if (prevProps === nextProps) {
       return false
     }
     if (!prevProps) {
+      // 没有旧props ---> 由新props决定
       return !!nextProps
     }
     if (!nextProps) {
+      // 存在旧props ---> 不存在新props
       return true
     }
+    // 新旧props都存在检测否有变化的props
     return hasPropsChanged(prevProps, nextProps, emits)
   }
 
