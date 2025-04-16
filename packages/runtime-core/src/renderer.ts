@@ -1336,6 +1336,7 @@ function baseCreateRenderer(
   ) => {
     const componentUpdateFn = () => {
       if (!instance.isMounted) {
+        // 挂载组件
         let vnodeHook: VNodeHook | null | undefined
         const { el, props } = initialVNode
         const { bm, m, parent, root, type } = instance
@@ -1526,6 +1527,9 @@ function baseCreateRenderer(
         // Disallow component effect recursion during pre-lifecycle hooks.
         toggleRecurse(instance, false)
         if (next) {
+          // 如果存在next 我们需要更新组件实例相关信息
+          // 修正instance 和 nextVNode相关指向关系
+          // 更新Props和Slots
           next.el = vnode.el
           updateComponentPreRender(instance, next, optimized)
         } else {
@@ -1552,6 +1556,7 @@ function baseCreateRenderer(
         if (__DEV__) {
           startMeasure(instance, `render`)
         }
+        // 渲染新的子树
         const nextTree = renderComponentRoot(instance)
         if (__DEV__) {
           endMeasure(instance, `render`)
@@ -2055,12 +2060,16 @@ function baseCreateRenderer(
           // 如果索引不存在，找不到 直接卸载
           unmount(prevChild, parentComponent, parentSuspense, true)
         } else {
+          // 存储当前child在新children索引 ---> 在旧children索引
           newIndexToOldIndexMap[newIndex - s2] = i + 1
           if (newIndex >= maxNewIndexSoFar) {
+            // child在新children中的索引为递增就直接更新
             maxNewIndexSoFar = newIndex
           } else {
+            // newIndex如果不是递增，说明新children剩余序列相对旧children不是相同的顺序，需要移动某些元素
             moved = true
           }
+          // 同时存在于新旧children中的直接patch
           patch(
             prevChild,
             c2[newIndex] as VNode,
@@ -2078,18 +2087,24 @@ function baseCreateRenderer(
 
       // 5.3 move and mount
       // generate longest stable subsequence only when nodes have moved
+      // 得到newIndexToOldIndexMap的最长上升子序列对应的索引下标
+      // 也就意味着得到了旧children 最长的不需要移动的子序列
+      // 这里采用了最长递增子序列的方式来查找出，新子序中最长的保持了旧子序顺序的元素下标（也就是在新子序中的下标）
       const increasingNewIndexSequence = moved
         ? getSequence(newIndexToOldIndexMap)
         : EMPTY_ARR
       j = increasingNewIndexSequence.length - 1
       // looping backwards so that we can use last patched node as anchor
+      // 反向循环
       for (i = toBePatched - 1; i >= 0; i--) {
         const nextIndex = s2 + i
         const nextChild = c2[nextIndex] as VNode
+        // 通过新children获取插入的相对位置（dom的后一个元素）
         const anchor =
           nextIndex + 1 < l2 ? (c2[nextIndex + 1] as VNode).el : parentAnchor
         if (newIndexToOldIndexMap[i] === 0) {
           // mount new
+          // 没有建立新child在旧children中的索引说明是新增元素需要挂载
           patch(
             null,
             nextChild,
@@ -2105,7 +2120,11 @@ function baseCreateRenderer(
           // move if:
           // There is no stable subsequence (e.g. a reverse)
           // OR current node is not among the stable sequence
+          // 如果需要移动的情况
+          // 不需要移动的元素已经没有了那就只剩下需要移动的
+          // 当前索引不在最长递增子序列中
           if (j < 0 || i !== increasingNewIndexSequence[j]) {
+            // 移动
             move(nextChild, container, anchor, MoveType.REORDER)
           } else {
             j--
