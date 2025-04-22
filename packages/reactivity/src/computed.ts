@@ -47,58 +47,72 @@ export interface WritableComputedOptions<T, S = T> {
 export class ComputedRefImpl<T = any> implements Subscriber {
   /**
    * @internal
+   * 缓存的计算结果
    */
   _value: any = undefined
   /**
    * @internal
+   * 依赖它的 effect 会登记在这里
    */
   readonly dep: Dep = new Dep(this)
   /**
    * @internal
+   * 标记是一个 ref 类型，供外部识别
    */
   readonly __v_isRef = true
   // TODO isolatedDeclarations ReactiveFlags.IS_REF
   /**
    * @internal
+   * 	是否为只读 computed（无 setter）
    */
   readonly __v_isReadonly: boolean
   // TODO isolatedDeclarations ReactiveFlags.IS_READONLY
   // A computed is also a subscriber that tracks other deps
   /**
    * @internal
+   * 依赖的属性链表头
    */
   deps?: Link = undefined
   /**
    * @internal
+   * 依赖的属性链表尾
    */
   depsTail?: Link = undefined
   /**
    * @internal
+   * 状态标记，是否脏、是否激活等
    */
   flags: EffectFlags = EffectFlags.DIRTY
   /**
    * @internal
+   * 上次更新时的版本号，用于优化
    */
   globalVersion: number = globalVersion - 1
   /**
    * @internal
+   * 是否服务端渲染
    */
   isSSR: boolean
   /**
    * @internal
+   * 批量更新链表结构
    */
   next?: Subscriber = undefined
 
   // for backwards compat
+  // 向后兼容。作为 effect 存在
   effect: this = this
   // dev only
+  // Debug 钩子
   onTrack?: (event: DebuggerEvent) => void
   // dev only
+  // Debug 钩子
   onTrigger?: (event: DebuggerEvent) => void
 
   /**
    * Dev only
    * @internal
+   * 内部递归调用警告（dev only）
    */
   _warnRecursive?: boolean
 
@@ -115,12 +129,14 @@ export class ComputedRefImpl<T = any> implements Subscriber {
    * @internal
    */
   notify(): true | void {
+    // 标记为需要重新计算
     this.flags |= EffectFlags.DIRTY
     if (
       !(this.flags & EffectFlags.NOTIFIED) &&
       // avoid infinite self recursion
       activeSub !== this
     ) {
+      // 放入批处理队列
       batch(this, true)
       return true
     } else if (__DEV__) {
@@ -129,6 +145,8 @@ export class ComputedRefImpl<T = any> implements Subscriber {
   }
 
   get value(): T {
+    // 如果有外部在用，就记录它
+    // 记录谁访问了我，或者说谁需要我
     const link = __DEV__
       ? this.dep.track({
           target: this,
@@ -136,6 +154,7 @@ export class ComputedRefImpl<T = any> implements Subscriber {
           key: 'value',
         })
       : this.dep.track()
+    // 如果是脏的，重新计算
     refreshComputed(this)
     // sync version after evaluation
     if (link) {
@@ -145,9 +164,11 @@ export class ComputedRefImpl<T = any> implements Subscriber {
   }
 
   set value(newValue) {
+    // 有 setter：调用 setter 实现“写入”
     if (this.setter) {
       this.setter(newValue)
     } else if (__DEV__) {
+      // 无 setter：只读，dev 模式下会发出警告
       warn('Write operation failed: computed value is readonly')
     }
   }
