@@ -174,6 +174,10 @@ export function isWhitespace(c: number): boolean {
 
 // 判断当前字符是否标志着“标签结构部分（如标签名、属性名）已经结束”，也就是：当前字符是 /、> 或空白字符时，标签的当前部分应当收尾了。
 function isEndOfTagSection(c: number): boolean {
+  // 字符	含义
+  // /	    自闭合标签（如 <br/>）
+  // >	    标签闭合（如 <div>）
+  // 空格	后面有属性名（如 <div class="a">）
   return c === CharCodes.Slash || c === CharCodes.Gt || isWhitespace(c)
 }
 
@@ -830,45 +834,85 @@ export default class Tokenizer {
     }
   }
 
+  // 会持续读取标签名字符，直到遇到结束信号（如空格、>、/），然后调用 handleTagName() 来处理标签名的结束逻辑。
   private stateInTagName(c: number): void {
     if (isEndOfTagSection(c)) {
       this.handleTagName(c)
     }
   }
 
+  //  SFC 模式下根层标签的标签名处理器。
+  // 如果不是 <template>，它会将其内容视为原始文本并启用 RCDATA 模式，避免 Vue 编译器深入解析。
   private stateInSFCRootTagName(c: number): void {
     if (isEndOfTagSection(c)) {
+      // 从缓冲区中截取标签名字符串，例如 pug, markdown, div
       const tag = this.buffer.slice(this.sectionStart, this.index)
+      // 如果不是 <template>，进入 RCDATA 模式
       if (tag !== 'template') {
+        // Vue 的 SFC 中，只有 <template> 是真正参与编译的模板标签
+        // 其余如：
+        // <pug> → 使用外部 pug loader 处理
+        // <markdown> → markdown 插件处理
+        // <div> → 非法使用，默认转为文本
+        // 所以这里转入 RCDATA 模式，整个内容当作字符串保留
+
+        // 设置当前目标关闭标签名（例如 </pug>）
+        // 从头开始匹配，进入 RCDATA 模式
         this.enterRCDATA(toCharCodes(`</` + tag), 0)
       }
       this.handleTagName(c)
     }
   }
 
+  // 截取 buffer 中的标签名字符串（从 sectionStart 到 index）
+  // 检查是否是自定义标签、特殊标签、组件等
+  // 通知 parser 回调 onopentagname() 等
+  // 根据结束字符 c 设置下一个状态（如进入属性、判断是否自闭合等）
   private handleTagName(c: number) {
     this.cbs.onopentagname(this.sectionStart, this.index)
     this.sectionStart = -1
     this.state = State.BeforeAttrName
     this.stateBeforeAttrName(c)
   }
+
+  // 用于解析 </ 后面的字符，判断关闭标签名是否合法，或是否是特殊结构（如注释、非法写法），并引导进入对应状态。
+  // 例如
+  // </div>
+  // </ script>
+  // </!DOCTYPE html>
+  // </123abc>
   private stateBeforeClosingTagName(c: number): void {
     if (isWhitespace(c)) {
       // Ignore
+      // 在 </ （</ 后跟空格）情况下，暂时什么也不做
+      // 下一个字符会再调用这个函数处理
     } else if (c === CharCodes.Gt) {
+      // 表示标签立即关闭，形如 </>，这是非法的（缺失结束标签名）
       if (__DEV__ || !__BROWSER__) {
+        // 在开发或服务端模式下报错
         this.cbs.onerr(ErrorCodes.MISSING_END_TAG_NAME, this.index)
       }
       this.state = State.Text
       // Ignore
+      // 恢复为文本状态，跳过错误闭合标签
       this.sectionStart = this.index + 1
     } else {
+      // 其他情况：根据字符判断是合法标签名或特殊结构
+
+      // 如果当前字符是合法的标签名起始字符（a-zA-Z）：
+      // 进入 State.InClosingTagName
+      // 准备读取标签名，比如 </div>
+      //
+      // 否则进入 State.InSpecialComment
+      // 用于处理形如 </!DOCTYPE> 之类的非法写法或奇怪注释
+      // 也可能是 <--、</?xml 等
       this.state = isTagStartChar(c)
         ? State.InClosingTagName
         : State.InSpecialComment
       this.sectionStart = this.index
     }
   }
+
   private stateInClosingTagName(c: number): void {
     if (c === CharCodes.Gt || isWhitespace(c)) {
       this.cbs.onclosetag(this.sectionStart, this.index)
@@ -877,6 +921,7 @@ export default class Tokenizer {
       this.stateAfterClosingTagName(c)
     }
   }
+
   private stateAfterClosingTagName(c: number): void {
     // Skip everything until ">"
     if (c === CharCodes.Gt) {
@@ -884,6 +929,7 @@ export default class Tokenizer {
       this.sectionStart = this.index + 1
     }
   }
+
   private stateBeforeAttrName(c: number): void {
     if (c === CharCodes.Gt) {
       this.cbs.onopentagend(this.index)
@@ -915,6 +961,7 @@ export default class Tokenizer {
       this.handleAttrStart(c)
     }
   }
+
   private handleAttrStart(c: number) {
     if (c === CharCodes.LowerV && this.peek() === CharCodes.Dash) {
       this.state = State.InDirName
@@ -933,6 +980,7 @@ export default class Tokenizer {
       this.sectionStart = this.index
     }
   }
+
   private stateInSelfClosingTag(c: number): void {
     if (c === CharCodes.Gt) {
       this.cbs.onselfclosingtag(this.index)
@@ -944,6 +992,7 @@ export default class Tokenizer {
       this.stateBeforeAttrName(c)
     }
   }
+
   private stateInAttrName(c: number): void {
     if (c === CharCodes.Eq || isEndOfTagSection(c)) {
       this.cbs.onattribname(this.sectionStart, this.index)
@@ -960,6 +1009,7 @@ export default class Tokenizer {
       )
     }
   }
+
   private stateInDirName(c: number): void {
     if (c === CharCodes.Eq || isEndOfTagSection(c)) {
       this.cbs.ondirname(this.sectionStart, this.index)
@@ -974,6 +1024,7 @@ export default class Tokenizer {
       this.sectionStart = this.index + 1
     }
   }
+
   private stateInDirArg(c: number): void {
     if (c === CharCodes.Eq || isEndOfTagSection(c)) {
       this.cbs.ondirarg(this.sectionStart, this.index)
@@ -986,6 +1037,7 @@ export default class Tokenizer {
       this.sectionStart = this.index + 1
     }
   }
+
   private stateInDynamicDirArg(c: number): void {
     if (c === CharCodes.RightSquare) {
       this.state = State.InDirArg
@@ -1000,6 +1052,7 @@ export default class Tokenizer {
       }
     }
   }
+
   private stateInDirModifier(c: number): void {
     if (c === CharCodes.Eq || isEndOfTagSection(c)) {
       this.cbs.ondirmodifier(this.sectionStart, this.index)
@@ -1009,12 +1062,14 @@ export default class Tokenizer {
       this.sectionStart = this.index + 1
     }
   }
+
   private handleAttrNameEnd(c: number): void {
     this.sectionStart = this.index
     this.state = State.AfterAttrName
     this.cbs.onattribnameend(this.index)
     this.stateAfterAttrName(c)
   }
+
   private stateAfterAttrName(c: number): void {
     if (c === CharCodes.Eq) {
       this.state = State.BeforeAttrValue
@@ -1028,6 +1083,7 @@ export default class Tokenizer {
       this.handleAttrStart(c)
     }
   }
+
   private stateBeforeAttrValue(c: number): void {
     if (c === CharCodes.DoubleQuote) {
       this.state = State.InAttrValueDq
@@ -1041,6 +1097,7 @@ export default class Tokenizer {
       this.stateInAttrValueNoQuotes(c) // Reconsume token
     }
   }
+
   private handleInAttrValue(c: number, quote: number) {
     if (c === quote || (__BROWSER__ && this.fastForwardTo(quote))) {
       this.cbs.onattribdata(this.sectionStart, this.index)
@@ -1180,13 +1237,24 @@ export default class Tokenizer {
    *
    * States that are more likely to be hit are higher up, as a performance improvement.
    */
+  // 模板编译的“字符级状态机主循环”。
+  // Vue 模板编译器的词法分析主引擎，
+  // 它按字符读取模板字符串，并根据当前状态调用对应的状态函数，驱动 tokenizer 运转。
   public parse(input: string): void {
+    // 设置待解析的字符串为内部 buffer
+    // 接下来从这个 buffer 中逐字符读取
     this.buffer = input
     while (this.index < this.buffer.length) {
+      // 每次处理一个字符（用 charCodeAt() 获取其 UTF-16 编码）
       const c = this.buffer.charCodeAt(this.index)
+
+      // 如果当前字符是换行符，记录它的位置
+      // 方便 getPos() 算出行列号，给 AST 节点定位
       if (c === CharCodes.NewLine) {
         this.newlines.push(this.index)
       }
+
+      // 根据当前状态调用对应处理函数
       switch (this.state) {
         case State.Text: {
           this.stateText(c)
@@ -1326,61 +1394,102 @@ export default class Tokenizer {
         }
       }
       this.index++
+      // 每轮解析完一个字符，就移动到下一个
     }
+    // 发出还没处理的文本或属性值段（避免遗漏）
+    // 特别重要于流式处理/中断处理情况
     this.cleanup()
+    // 处理 HTML 实体未闭合的情况
+    // 调用 handleTrailingData() 处理遗留文本/注释
+    // 最后调用 onend() 通知词法分析完成
     this.finish()
   }
 
   /**
    * Remove data that has already been consumed from the buffer.
+   * 在某些特定状态下提前输出已读数据，防止数据堆积或错过 emit 时机，确保字符流保持同步。
+   * 用于提前 emit 已读取但尚未提交的文本或属性值数据，并更新 sectionStart。
    */
+  // 在 streaming 模式下（流式解析），我们不能一次性读取整个文档
+  // 所以必须定期清理已处理的数据段
+  // 否则会浪费内存，或者导致数据不被 emit（尤其是文本或属性）
   private cleanup() {
     // If we are inside of text or attributes, emit what we already have.
+    // 如果 sectionStart < index，表示中间还有一段已扫描但没触发回调的数据
     if (this.sectionStart !== this.index) {
       if (
         this.state === State.Text ||
         (this.state === State.InRCDATA && this.sequenceIndex === 0)
       ) {
+        //  如果当前状态是 文本 或 RCDATA 且没匹配结束标签
+
+        // 正常的 HTML 文本（如 <p>Hello）
+        // 或 <title>Hello 这类 RCDATA 模式下，还没遇到 </title>，也可以 emit
+
+        // 调用 ontext(start, end) 回调
+        // 然后将起点更新为当前位置
         this.cbs.ontext(this.sectionStart, this.index)
         this.sectionStart = this.index
       } else if (
+        // 如果当前在属性值中（双引号、单引号、无引号）
+        // 表示正在解析一个属性值（如 class="abc"）
         this.state === State.InAttrValueDq ||
         this.state === State.InAttrValueSq ||
         this.state === State.InAttrValueNq
       ) {
+        // 调用 onattribdata(start, end) 发出属性值段
         this.cbs.onattribdata(this.sectionStart, this.index)
         this.sectionStart = this.index
       }
     }
   }
 
+  // 用于收尾实体解析、处理遗留内容，并通知解析结束。
   private finish() {
+    //  如果还在处理 HTML 实体，结束它
     if (!__BROWSER__ && this.state === State.InEntity) {
+      // 非浏览器环境下，如果当前处于 &gt;、&#x3C; 等实体解析中
+      // 调用 entityDecoder.end() 强制结束（即使没看到 ;）
+      // 然后恢复状态到之前的 Text 或 RCDATA
       this.entityDecoder!.end()
       this.state = this.baseState
+      // <p>&gt
+      // 这里实体 &gt 没写 ;，但文件到结尾了，也得强行解码
     }
 
+    // 发出尚未回调的数据
     this.handleTrailingData()
 
+    // 调用回调 onend()，通知“输入流完全结束”
+    //
+    // 上层 parser 可以从此知道“AST 构建阶段可以开始了”
     this.cbs.onend()
   }
 
   /** Handle any trailing data. */
+  // 负责在字符流结束后处理未发出的最后一段内容（文本、注释、CDATA），以确保词法分析完整性和语义完整性。
   private handleTrailingData() {
+    // 获取当前缓冲区的结束位置（即模板字符的末尾
     const endIndex = this.buffer.length
 
     // If there is no remaining data, we are done.
+    // 没有剩余内容，直接返回
     if (this.sectionStart >= endIndex) {
       return
     }
 
+    // 注释 / CDATA 尚未闭合，但文件已结束
     if (this.state === State.InCommentLike) {
+      // 如果仍处于 <!-- 或 <![CDATA[ 的注释状态，且文件已结束：
+      // 触发回调（即使 --> 或 ]]> 没闭合）
+      // 仍然保留内容，让 parser 有机会处理它
       if (this.currentSequence === Sequences.CdataEnd) {
         this.cbs.oncdata(this.sectionStart, endIndex)
       } else {
         this.cbs.oncomment(this.sectionStart, endIndex)
       }
     } else if (
+      // 如果在标签或属性状态中，不触发任何回调（静默忽略）
       this.state === State.InTagName ||
       this.state === State.BeforeAttrName ||
       this.state === State.BeforeAttrValue ||
@@ -1400,31 +1509,65 @@ export default class Tokenizer {
        * respective callback signals that the tag should be ignored.
        */
     } else {
+      // 正常纯文本末尾 → 发出回调
       this.cbs.ontext(this.sectionStart, endIndex)
     }
   }
 
+  // 处理 HTML 实体解析完成后，触发回调的函数
   private emitCodePoint(cp: number, consumed: number): void {
+    // 浏览器环境一般不走这个路径，实体直接交由 DOM 处理
+    // 编译器自身仅在非浏览器环境中解析实体（如 SSR）
     if (!__BROWSER__) {
       if (this.baseState !== State.Text && this.baseState !== State.InRCDATA) {
+        // 如果当前在属性中（如 class="&gt;"） → 触发属性相关的实体回调 onattribentity()
+        // 如果是在普通文本中（如 Hello &lt;div&gt;） → 触发文本相关的实体回调 ontextentity(
         if (this.sectionStart < this.entityStart) {
+          // 在实体前可能还有一段未处理的文本，比如：
+          // <p>2 &gt; 1</p>
+          //      ^     ^
+          //      |     entityStart
+          //   sectionStart
+
+          // 把 2 部分先发出去
           this.cbs.onattribdata(this.sectionStart, this.entityStart)
         }
+
+        // 设定下一个起点，并修正当前索引
+        // 更新 sectionStart：实体之后的第一个字符位置
+        // this.index - 1 是为了外部循环再 index++ 时能对得上
         this.sectionStart = this.entityStart + consumed
         this.index = this.sectionStart - 1
 
+        // 触发实体字符回调
+        // 将实体内容回调出去
+        // 回调参数为：
+        // 解码后的字符（通过 fromCodePoint(cp)）
+        // 起始位置
+        // 结束位置
         this.cbs.onattribentity(
           fromCodePoint(cp),
           this.entityStart,
           this.sectionStart,
         )
       } else {
+        // 先触发前面剩余内容
         if (this.sectionStart < this.entityStart) {
           this.cbs.ontext(this.sectionStart, this.entityStart)
         }
+
+        // 设定下一个起点，并修正当前索引
+        // 更新 sectionStart：实体之后的第一个字符位置
+        // this.index - 1 是为了外部循环再 index++ 时能对得上
         this.sectionStart = this.entityStart + consumed
         this.index = this.sectionStart - 1
 
+        // 触发实体字符回调
+        // 将实体内容回调出去
+        // 回调参数为：
+        // 解码后的字符（通过 fromCodePoint(cp)）
+        // 起始位置
+        // 结束位置
         this.cbs.ontextentity(
           fromCodePoint(cp),
           this.entityStart,
