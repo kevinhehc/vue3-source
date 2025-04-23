@@ -1279,33 +1279,48 @@ export function createAssignmentExpression(
   }
 }
 
+// 构建一个 SequenceExpression 节点（逗号表达式），用于 codegen 阶段表示多表达式顺序执行。
+
+// 在生成代码时，这种表达式会变成 (a, b, c)，表示：
+// 依次执行 a, b, c
+// 最终返回的是 c 的结果
+
 export function createSequenceExpression(
   expressions: SequenceExpression['expressions'],
 ): SequenceExpression {
   return {
+    // type: 标记为 JS_SEQUENCE_EXPRESSION
+    // expressions: 实际的表达式列表
+    // loc: 位置信息（调试和 source map 用），这里用一个 stub 代替
     type: NodeTypes.JS_SEQUENCE_EXPRESSION,
     expressions,
     loc: locStub,
   }
 }
 
+// 一个 小型 AST 节点构造工具，常在 generate() 阶段被调用，用于将最终的 render() 函数主体封装为 return vnode 形式。
 export function createReturnStatement(
+  // ReturnStatement['returns'] 是类型提取写法，代表 ReturnStatement 接口中的 returns 字段的类型
   returns: ReturnStatement['returns'],
 ): ReturnStatement {
   return {
     type: NodeTypes.JS_RETURN_STATEMENT,
+    // 你传进来的表达式
     returns,
-    loc: locStub,
+    loc: locStub, // 一个占位位置（表示“源码位置”），在实际编译中这个位置信息对 source map 有用，但不影响功能
   }
 }
 
 export function getVNodeHelper(
   ssr: boolean,
-  isComponent: boolean,
+  isComponent: boolean, // 当前 VNode 是否是组件（例如 <MyComp />）
 ): typeof CREATE_VNODE | typeof CREATE_ELEMENT_VNODE {
+  // CREATE_BLOCK：用于组件或 SSR 情况
+  // CREATE_ELEMENT_BLOCK：用于普通 DOM 元素
   return ssr || isComponent ? CREATE_VNODE : CREATE_ELEMENT_VNODE
 }
 
+// 根据当前编译环境（是否 SSR）以及节点类型（是否组件），选择正确的 "创建 block VNode" 的辅助函数（helper）名称。
 export function getVNodeBlockHelper(
   ssr: boolean,
   isComponent: boolean,
@@ -1313,14 +1328,35 @@ export function getVNodeBlockHelper(
   return ssr || isComponent ? CREATE_BLOCK : CREATE_ELEMENT_BLOCK
 }
 
+// 用于 把普通的 VNodeCall 节点转为 block vnode 节点 的工具函数，
+// 在 transform 阶段（尤其是 transformElement()、transformFor()、transformIf() 等）会被调用。
 export function convertToBlock(
-  node: VNodeCall,
-  { helper, removeHelper, inSSR }: TransformContext,
+  node: VNodeCall, // node 是当前的虚拟节点调用结构 VNodeCall
+  { helper, removeHelper, inSSR }: TransformContext, //  transform 上下文，用于注册/移除渲染 helper（辅助函数），如 createVNode、createBlock、openBlock
 ): void {
+  // 如果这个节点不是 block 节点（也就是还没调用 createBlock()），我们才处理
+  // block vnode 是 Vue 3 的 patch 性能优化：开启 block 后，diff 会跳过静态子节点，只处理动态部分
   if (!node.isBlock) {
+    // 标记它为 block vnode，这样 codegen 阶段会使用 createBlock(...) 而不是 createVNode(...)
     node.isBlock = true
+
+    // 删除旧的 helper 函数，比如：
+    // 非组件：createVNode
+    // 组件：createVNode 或 SSR 对应的函数
+    // 👇 getVNodeHelper() 会根据是否为组件、是否是 SSR 模式返回对应 helper 名字
     removeHelper(getVNodeHelper(inSSR, node.isComponent))
+
+    // 注册 openBlock() helper，它会在生成代码中变成：
+    // openBlock()
+    // createBlock(...)
+    // openBlock() 是 Vue 的 “块追踪机制”，用于在 patch 阶段记录当前 block 中的动态节点。
     helper(OPEN_BLOCK)
+
+    // 注册新的 helper 函数（一般是 createBlock），用于实际创建 block vnode
+    //
+    // 常见结果：
+    // 非组件 → createBlock
+    // 组件 → createBlock 或 createVNode（取决于具体优化）
     helper(getVNodeBlockHelper(inSSR, node.isComponent))
   }
 }
