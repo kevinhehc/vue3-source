@@ -1,18 +1,26 @@
+// 类型导入：源代码位置类型
 import type { SourceLocation } from '../ast'
+// 类型导入：编译器错误对象
 import type { CompilerError } from '../errors'
+// 类型导入：解析器选项（合并后的配置）
 import type { MergedParserOptions } from '../parser'
+// 类型导入：转换上下文
 import type { TransformContext } from '../transform'
 
+// 定义兼容性配置的类型，键是枚举，值是布尔值或 'suppress-warning'
+// 还可包含 MODE 字段指定是 Vue 2 还是 Vue 3
 export type CompilerCompatConfig = Partial<
   Record<CompilerDeprecationTypes, boolean | 'suppress-warning'>
 > & {
   MODE?: 2 | 3
 }
 
+// 编译器兼容选项接口（通常由用户传入）
 export interface CompilerCompatOptions {
   compatConfig?: CompilerCompatConfig
 }
 
+// 枚举：列出所有 Vue 2 特性中已被废弃的类型，供兼容处理
 export enum CompilerDeprecationTypes {
   COMPILER_IS_ON_ELEMENT = 'COMPILER_IS_ON_ELEMENT',
   COMPILER_V_BIND_SYNC = 'COMPILER_V_BIND_SYNC',
@@ -24,11 +32,15 @@ export enum CompilerDeprecationTypes {
   COMPILER_FILTERS = 'COMPILER_FILTERS',
 }
 
+// 废弃特性的说明数据结构
 type DeprecationData = {
+  // 支持静态字符串或函数
   message: string | ((...args: any[]) => string)
+  // 可选的文档链接
   link?: string
 }
 
+// 每个废弃特性的具体说明信息及文档链接
 const deprecationData: Record<CompilerDeprecationTypes, DeprecationData> = {
   [CompilerDeprecationTypes.COMPILER_IS_ON_ELEMENT]: {
     message:
@@ -91,42 +103,54 @@ const deprecationData: Record<CompilerDeprecationTypes, DeprecationData> = {
   },
 }
 
+// 获取指定兼容项或 MODE 的值
 function getCompatValue(
   key: CompilerDeprecationTypes | 'MODE',
   { compatConfig }: MergedParserOptions | TransformContext,
 ) {
+  // 获取配置项的值
   const value = compatConfig && compatConfig[key]
   if (key === 'MODE') {
+    // 如果未设置 MODE，默认是 Vue 3 模式
     return value || 3 // compiler defaults to v3 behavior
   } else {
     return value
   }
 }
 
+// 判断某项兼容性特性是否启用
 export function isCompatEnabled(
   key: CompilerDeprecationTypes,
   context: MergedParserOptions | TransformContext,
 ): boolean {
+  // 获取当前模式
   const mode = getCompatValue('MODE', context)
+  // 获取兼容项配置
   const value = getCompatValue(key, context)
   // in v3 mode, only enable if explicitly set to true
   // otherwise enable for any non-false value
+  // Vue 3 模式下，仅当值为 true 时才启用
+  // Vue 2 模式下，非 false 都认为启用
   return mode === 3 ? value === true : value !== false
 }
 
+// 检查兼容项是否启用，并在开发模式下发出警告
 export function checkCompatEnabled(
   key: CompilerDeprecationTypes,
   context: MergedParserOptions | TransformContext,
   loc: SourceLocation | null,
   ...args: any[]
 ): boolean {
+  // 检查是否启用
   const enabled = isCompatEnabled(key, context)
   if (__DEV__ && enabled) {
+    // 仅在开发环境中警告
     warnDeprecation(key, context, loc, ...args)
   }
   return enabled
 }
 
+// 发出废弃特性的警告信息
 export function warnDeprecation(
   key: CompilerDeprecationTypes,
   context: MergedParserOptions | TransformContext,
@@ -135,15 +159,19 @@ export function warnDeprecation(
 ): void {
   const val = getCompatValue(key, context)
   if (val === 'suppress-warning') {
+    // 若设置为 suppress-warning，则不发出警告
     return
   }
+  // 获取该项的警告内容
   const { message, link } = deprecationData[key]
   const msg = `(deprecation ${key}) ${
     typeof message === 'function' ? message(...args) : message
   }${link ? `\n  Details: ${link}` : ``}`
 
+  // 构造语法错误对象用于发出警告
   const err = new SyntaxError(msg) as CompilerError
   err.code = key
   if (loc) err.loc = loc
+  // 调用上下文中的警告函数
   context.onWarn(err)
 }

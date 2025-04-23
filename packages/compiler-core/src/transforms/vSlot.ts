@@ -34,6 +34,7 @@ import { CREATE_SLOTS, RENDER_LIST, WITH_CTX } from '../runtimeHelpers'
 import { createForLoopParams, finalizeForParseResult } from './vFor'
 import { SlotFlags, slotFlagsText } from '@vue/shared'
 
+// 默认 fallback 插槽内容（用于 v-if v-else 等条件插槽）
 const defaultFallback = createSimpleExpression(`undefined`, false)
 
 // A NodeTransform that:
@@ -43,6 +44,7 @@ const defaultFallback = createSimpleExpression(`undefined`, false)
 // 2. Track v-slot depths so that we know a slot is inside another slot.
 //    Note the exit callback is executed before buildSlots() on the same node,
 //    so only nested slots see positive numbers.
+// 追踪 v-slot 插槽作用域：添加/移除标识符（仅在非浏览器模式 + prefixIdentifiers 为 true 时启用）
 export const trackSlotScopes: NodeTransform = (node, context) => {
   if (
     node.type === NodeTypes.ELEMENT &&
@@ -51,18 +53,20 @@ export const trackSlotScopes: NodeTransform = (node, context) => {
   ) {
     // We are only checking non-empty v-slot here
     // since we only care about slots that introduce scope variables.
+    // 找到 v-slot 指令
     const vSlot = findDir(node, 'slot')
     if (vSlot) {
       const slotProps = vSlot.exp
+      // 如果开启了 prefixIdentifiers，就把插槽参数加入作用域标识符
       if (!__BROWSER__ && context.prefixIdentifiers) {
         slotProps && context.addIdentifiers(slotProps)
       }
-      context.scopes.vSlot++
+      context.scopes.vSlot++ // 插槽嵌套层级 +1
       return () => {
         if (!__BROWSER__ && context.prefixIdentifiers) {
           slotProps && context.removeIdentifiers(slotProps)
         }
-        context.scopes.vSlot--
+        context.scopes.vSlot-- // 退出时 -1
       }
     }
   }
@@ -70,8 +74,10 @@ export const trackSlotScopes: NodeTransform = (node, context) => {
 
 // A NodeTransform that tracks scope identifiers for scoped slots with v-for.
 // This transform is only applied in non-browser builds with { prefixIdentifiers: true }
+// 追踪带 v-for 的插槽作用域（如 <template v-slot v-for>）
 export const trackVForSlotScopes: NodeTransform = (node, context) => {
   let vFor
+  // 如果是 <template>，包含 v-slot 并且有 v-for
   if (
     isTemplateNode(node) &&
     node.props.some(isVSlot) &&
@@ -79,9 +85,11 @@ export const trackVForSlotScopes: NodeTransform = (node, context) => {
   ) {
     const result = vFor.forParseResult
     if (result) {
+      // 处理表达式（生成作用域）
       finalizeForParseResult(result, context)
       const { value, key, index } = result
       const { addIdentifiers, removeIdentifiers } = context
+      // 逐个注册作用域变量
       value && addIdentifiers(value)
       key && addIdentifiers(key)
       index && addIdentifiers(index)
@@ -95,6 +103,7 @@ export const trackVForSlotScopes: NodeTransform = (node, context) => {
   }
 }
 
+// Slot 函数构造类型：根据 props、v-for、children 构建函数表达式
 export type SlotFnBuilder = (
   slotProps: ExpressionNode | undefined,
   vFor: DirectiveNode | undefined,
@@ -102,17 +111,20 @@ export type SlotFnBuilder = (
   loc: SourceLocation,
 ) => FunctionExpression
 
+// 默认插槽函数构造器：接收插槽 props、内容、loc
+// 构造标准客户端插槽函数（返回箭头函数）
 const buildClientSlotFn: SlotFnBuilder = (props, _vForExp, children, loc) =>
   createFunctionExpression(
-    props,
-    children,
-    false /* newline */,
-    true /* isSlot */,
-    children.length ? children[0].loc : loc,
+    props, // 参数（作用域变量）
+    children, // 子节点（插槽内容）
+    false /* newline */, // 不强制换行
+    true /* isSlot */, // 标记为插槽函数
+    children.length ? children[0].loc : loc, // 定位插槽位置
   )
 
 // Instead of being a DirectiveTransform, v-slot processing is called during
 // transformElement to build the slots object for a component.
+// 生成组件 slots 对象
 export function buildSlots(
   node: ElementNode,
   context: TransformContext,
@@ -370,31 +382,35 @@ export function buildSlots(
   }
 }
 
+// 构造动态插槽对象（用于组件的 slots 数组）
 function buildDynamicSlot(
-  name: ExpressionNode,
-  fn: FunctionExpression,
-  index?: number,
+  name: ExpressionNode, // 插槽名表达式，如 "default" 或 变量
+  fn: FunctionExpression, // 渲染插槽内容的函数
+  index?: number, // 可选：用于唯一标识的 key（用于 v-for 中的多个 slot）
 ): ObjectExpression {
   const props = [
-    createObjectProperty(`name`, name),
-    createObjectProperty(`fn`, fn),
+    createObjectProperty(`name`, name), // name: 'slotName'
+    createObjectProperty(`fn`, fn), // fn: 渲染函数
   ]
   if (index != null) {
+    // 添加 key 字段（用于优化 patch）
     props.push(
       createObjectProperty(`key`, createSimpleExpression(String(index), true)),
     )
   }
+  // 返回对象表达式节点
   return createObjectExpression(props)
 }
 
+// 判断是否包含 <slot> 标签，或者子节点中有转发插槽
 function hasForwardedSlots(children: TemplateChildNode[]): boolean {
   for (let i = 0; i < children.length; i++) {
     const child = children[i]
     switch (child.type) {
       case NodeTypes.ELEMENT:
         if (
-          child.tagType === ElementTypes.SLOT ||
-          hasForwardedSlots(child.children)
+          child.tagType === ElementTypes.SLOT || // 明确是 <slot>
+          hasForwardedSlots(child.children) // 或者它的子节点中也有 slot
         ) {
           return true
         }
@@ -410,13 +426,14 @@ function hasForwardedSlots(children: TemplateChildNode[]): boolean {
         break
     }
   }
-  return false
+  return false // 所有情况都未命中，返回 false
 }
 
+// 判断一个节点是否为非空白内容（非纯空格文本或插值表达式）
 function isNonWhitespaceContent(node: TemplateChildNode): boolean {
   if (node.type !== NodeTypes.TEXT && node.type !== NodeTypes.TEXT_CALL)
-    return true
+    return true // 表达式或元素类型 => 非空白内容
   return node.type === NodeTypes.TEXT
-    ? !!node.content.trim()
-    : isNonWhitespaceContent(node.content)
+    ? !!node.content.trim() // 去除空格后还有内容
+    : isNonWhitespaceContent(node.content) // TEXT_CALL 递归判断内部表达式
 }
