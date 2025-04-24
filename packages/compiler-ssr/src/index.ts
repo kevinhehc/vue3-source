@@ -28,6 +28,7 @@ import { ssrTransformShow } from './transforms/ssrVShow'
 import { ssrInjectFallthroughAttrs } from './transforms/ssrInjectFallthroughAttrs'
 import { ssrInjectCssVars } from './transforms/ssrInjectCssVars'
 
+// 核心方法
 export function compile(
   source: string | RootNode,
   options: CompilerOptions = {},

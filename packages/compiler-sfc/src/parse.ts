@@ -104,6 +104,7 @@ export const parseCache:
   | Map<string, SFCParseResult>
   | LRUCache<string, SFCParseResult> = createCache<SFCParseResult>()
 
+// 核心方法
 export function parse(
   source: string,
   options: SFCParseOptions = {},
@@ -164,6 +165,7 @@ export function parse(
       return
     }
     switch (node.tag) {
+      // 核心方法
       case 'template':
         if (!descriptor.template) {
           const templateBlock = (descriptor.template = createBlock(
@@ -193,6 +195,7 @@ export function parse(
           errors.push(createDuplicateBlockError(node))
         }
         break
+      // 核心方法
       case 'script':
         const scriptBlock = createBlock(node, source, pad) as SFCScriptBlock
         const isSetup = !!scriptBlock.attrs.setup
@@ -206,6 +209,7 @@ export function parse(
         }
         errors.push(createDuplicateBlockError(node, isSetup))
         break
+      // 核心方法
       case 'style':
         const styleBlock = createBlock(node, source, pad) as SFCStyleBlock
         if (styleBlock.attrs.vars) {

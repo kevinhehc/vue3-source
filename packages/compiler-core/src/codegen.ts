@@ -276,6 +276,7 @@ function createCodegenContext(
   return context
 }
 
+// 核心方法
 export function generate(
   ast: RootNode,
   options: CodegenOptions & {
