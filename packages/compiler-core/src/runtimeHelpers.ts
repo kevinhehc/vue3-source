@@ -1,3 +1,7 @@
+// 这行定义了一个唯一的 Symbol，名字在开发环境下是 "Fragment"，生产环境下是空字符串（节省体积）。
+// Symbol() 是全局唯一的，因此可以保证不会与用户变量名冲突。
+// __DEV__ 是构建时的条件编译宏，仅在开发环境为 true。
+// unique symbol 是 TypeScript 的语法，确保类型系统能正确追踪该常量的唯一性。
 export const FRAGMENT: unique symbol = Symbol(__DEV__ ? `Fragment` : ``)
 export const TELEPORT: unique symbol = Symbol(__DEV__ ? `Teleport` : ``)
 export const SUSPENSE: unique symbol = Symbol(__DEV__ ? `Suspense` : ``)
@@ -83,6 +87,7 @@ export const IS_MEMO_SAME: unique symbol = Symbol(__DEV__ ? `isMemoSame` : ``)
 
 // Name mapping for runtime helpers that need to be imported from 'vue' in
 // generated code. Make sure these are correctly exported in the runtime!
+// Symbol 与函数名的映射表 helperNameMap 这个映射用于将 Symbol 映射回字符串函数名
 export const helperNameMap: Record<symbol, string> = {
   [FRAGMENT]: `Fragment`,
   [TELEPORT]: `Teleport`,
@@ -125,8 +130,22 @@ export const helperNameMap: Record<symbol, string> = {
   [IS_MEMO_SAME]: `isMemoSame`,
 }
 
+// 动态注册辅助函数（扩展点）
+// 这允许你在运行时向 helperNameMap 动态添加 helper，比如通过插件系统注入新 helper，扩展 Vue 的编译功能。
 export function registerRuntimeHelpers(helpers: Record<symbol, string>): void {
   Object.getOwnPropertySymbols(helpers).forEach(s => {
     helperNameMap[s] = helpers[s]
   })
 }
+
+// 应用示意：如何在 AST 里使用 Symbol
+// 编译器生成 AST 时，不写死字符串，而是引用这些 Symbol：
+// return {
+//   type: NodeTypes.CALL_EXPRESSION,
+//   callee: CREATE_VNODE, // 是 Symbol，不是字符串
+//   arguments: [...]
+// }
+// 然后在生成代码阶段，通过：
+// helperNameMap[CREATE_VNODE] // -> "createVNode"
+// 生成代码字符串：
+// createVNode("div", null, ...)
