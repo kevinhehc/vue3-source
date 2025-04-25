@@ -69,6 +69,7 @@ export interface SFCStyleBlock extends SFCBlock {
   module?: string | boolean
 }
 
+// 单vue文件拆分为多个文件的结果定义
 export interface SFCDescriptor {
   filename: string
   source: string
