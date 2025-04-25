@@ -840,7 +840,15 @@ export interface BlockStatement extends Node {
   body: (JSChildNode | IfStatement)[]
 }
 
-// TemplateLiteral 表示 JS 中的模板字符串（`...${...}`）结构
+// 模板字符串是一种 使用反引号 (``) 包裹的字符串表示法，可以包含 嵌入表达式 和 多行字符串。
+// const name = 'Wenqi'
+// const greeting = `Hello, ${name}!`
+// console.log(greeting) // 输出：Hello, Wenqi!
+// 特点：
+// 使用 `（反引号）定义
+// 可以嵌入 ${...} 表达式
+// 支持换行和多行文本
+// 常用于字符串拼接、动态生成内容
 export interface TemplateLiteral extends Node {
   // 类型：模板字符串节点
   type: NodeTypes.JS_TEMPLATE_LITERAL
