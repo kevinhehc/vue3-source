@@ -1,5 +1,6 @@
 const hasWarned: Record<string, boolean> = {}
 
+// 只告警一次，并缓存已经出现的告警
 export function warnOnce(msg: string): void {
   const isNodeProd =
     typeof process !== 'undefined' && process.env.NODE_ENV === 'production'
