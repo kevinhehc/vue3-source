@@ -14,6 +14,7 @@ import { getEscapedCssVarName } from '@vue/shared'
 
 export const CSS_VARS_HELPER = `useCssVars`
 
+// 将变量数组转为 CSS 变量对象字面量字符串，供 Vue runtime _useCssVars() 使用。
 export function genCssVarsFromList(
   vars: string[],
   id: string,
@@ -28,6 +29,7 @@ export function genCssVarsFromList(
     .join(',\n  ')}\n}`
 }
 
+// 生成 CSS 变量名，带组件 ID 和可选混淆（生产模式下使用 hash），也支持 SSR 时双重转义。
 function genVarName(
   id: string,
   raw: string,
@@ -44,6 +46,7 @@ function genVarName(
   }
 }
 
+// 去除表达式前后的 ' 或 " 字符（因为 v-bind('foo') 是合法用法）
 function normalizeExpression(exp: string) {
   exp = exp.trim()
   if (
@@ -57,7 +60,13 @@ function normalizeExpression(exp: string) {
 
 const vBindRE = /v-bind\s*\(/g
 
+// 从 SFCDescriptor 的 styles 数组中，提取所有 v-bind(...) 表达式中引用的变量名。
 export function parseCssVars(sfc: SFCDescriptor): string[] {
+  // 删除注释（/* ... */ 和 //）
+  // 正则匹配 v-bind(...) 调用（只支持函数式）
+  // 使用 lexBinding() 提取 (...) 中表达式范围
+  // 通过 normalizeExpression 清除引号
+  // 去重加入 vars 列表
   const vars: string[] = []
   sfc.styles.forEach(style => {
     let match
@@ -84,10 +93,14 @@ enum LexerState {
   inDoubleQuoteString,
 }
 
+// 扫描 CSS 内容中 v-bind(...) 的括号内容，正确提取表达式范围，支持嵌套括号和字符串字面量。
 function lexBinding(content: string, start: number): number | null {
   let state: LexerState = LexerState.inParens
   let parenDepth = 0
 
+  // 使用有限状态自动机（FSM）：
+  // 状态：inParens, inSingleQuoteString, inDoubleQuoteString
+  // 识别出右括号 ) 后停止
   for (let i = start; i < content.length; i++) {
     const char = content.charAt(i)
     switch (state) {
@@ -127,6 +140,7 @@ export interface CssVarsPluginOptions {
   isProd: boolean
 }
 
+// 作为 PostCSS 插件，处理所有 CSS 中包含 v-bind(...) 的样式属性值，转为合法 CSS 变量引用：
 export const cssVarsPlugin: PluginCreator<CssVarsPluginOptions> = opts => {
   const { id, isProd } = opts!
   return {
@@ -187,6 +201,7 @@ export function genCssVarsCode(
 
 // <script setup> already gets the calls injected as part of the transform
 // this is only for single normal <script>
+// 用于传统 <script> 模式时，将上述 _useCssVars 的调用注入到组件 setup() 中。
 export function genNormalScriptCssVarsCode(
   cssVars: string[],
   bindings: BindingMetadata,
