@@ -20,6 +20,9 @@ import { isImportUsed } from './script/importUsageCheck'
 import type { LRUCache } from 'lru-cache'
 import { genCacheKey } from '@vue/shared'
 
+//  Vue SFC (单文件组件) 解析器 parse 函数的完整实现。它是 Vue 编译器的核心部分之一，
+//  用于将 .vue 文件解析成结构化的对象（SFCDescriptor），方便后续编译阶段使用。
+
 export const DEFAULT_FILENAME = 'anonymous.vue'
 
 export interface SFCParseOptions {
@@ -106,10 +109,29 @@ export const parseCache:
   | LRUCache<string, SFCParseResult> = createCache<SFCParseResult>()
 
 // 核心方法
+// 将 .vue 文件内容（source）解析为包含多个 block 的结构体：
+// <template> → descriptor.template
+// <script> / <script setup> → descriptor.script, descriptor.scriptSetup
+// <style>（可多个）→ descriptor.styles
+// 自定义块如 <i18n> → descriptor.customBlocks
+// 最终返回：
+// {
+//   descriptor: SFCDescriptor,
+//   errors: (CompilerError | SyntaxError)[]
+// }
 export function parse(
   source: string,
   options: SFCParseOptions = {},
 ): SFCParseResult {
+  // 缓存机制： 使用 parseCache 避免重复解析
+  // AST 解析： 使用 compiler.parse() 将模板内容转为 AST（默认是 @vue/compiler-dom）
+  // 节点扫描： 遍历所有根元素子节点，根据标签类型（template/script/style/其他）创建对应的 Block
+  // Block 构造： 使用 createBlock() 提取每个 block 的 content, attrs, lang, src 等
+  // 错误处理： 如多个 <script setup>、不支持的 <style vars>、缺失 <template> + <script> 等
+  // SourceMap 生成： 对每个 block 生成 RawSourceMap（用于调试）
+  // CSS 变量提取：解析 v-bind(...)，生成 cssVars 字符串数组
+  // Slotted 检查： 判断是否使用 :slotted() 语法以优化编译性能
+  // 返回结构化结果
   const sourceKey = genCacheKey(source, {
     ...options,
     compiler: { parse: options.compiler?.parse },
@@ -467,6 +489,7 @@ export function hmrShouldReload(
  * This removes any whitespace that is common to all lines in the string from
  * each line in the string.
  */
+// 去除缩进（用于 <template lang="pug">）
 function dedent(s: string): [string, number] {
   const lines = s.split('\n')
   const minIndent = lines.reduce(function (minIndent, line) {

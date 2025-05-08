@@ -61,10 +61,12 @@ export interface SFCScriptCompileOptions {
    * Scope ID for prefixing injected CSS variables.
    * This must be consistent with the `id` passed to `compileStyle`.
    */
+  // 组件的唯一 ID，一般是 data-v-xxx，用来处理 CSS scope
   id: string
   /**
    * Production mode. Used to determine whether to generate hashed CSS variables
    */
+  // 是否为生产环境，用于决定是否 hash CSS vars
   isProd?: boolean
   /**
    * Enable/disable source map. Defaults to true.
@@ -86,36 +88,42 @@ export interface SFCScriptCompileOptions {
    * - This should only be used in production because it prevents the template
    * from being hot-reloaded separately from component state.
    */
+  // 是否将模板编译进 setup() 中（生产环境常开，禁用 HMR）
   inlineTemplate?: boolean
   /**
    * Generate the final component as a variable instead of default export.
    * This is useful in e.g. @vitejs/plugin-vue where the script needs to be
    * placed inside the main module.
    */
+  // 是否使用变量方式导出组件（如 const Comp = defineComponent(...)
   genDefaultAs?: string
   /**
    * Options for template compilation when inlining. Note these are options that
    * would normally be passed to `compiler-sfc`'s own `compileTemplate()`, not
    * options passed to `compiler-dom`.
    */
+  // 模板编译相关的选项（会传给 compileTemplate）
   templateOptions?: Partial<SFCTemplateCompileOptions>
   /**
    * Hoist <script setup> static constants.
    * - Only enables when one `<script setup>` exists.
    * @default true
    */
+  // 是否提升常量定义（只在 <script setup> 存在时有效）
   hoistStatic?: boolean
   /**
    * Set to `false` to disable reactive destructure for `defineProps` (pre-3.5
    * behavior), or set to `'error'` to throw hard error on props destructures.
    * @default true
    */
+  // 是否启用 defineProps() 解构处理
   propsDestructure?: boolean | 'error'
   /**
    * File system access methods to be used when resolving types
    * imported in SFC macros. Defaults to ts.sys in Node.js, can be overwritten
    * to use a virtual file system for use in browsers (e.g. in REPLs)
    */
+  // 文件系统接口，用于类型推导时查找 TS 文件
   fs?: {
     fileExists(file: string): boolean
     readFile(file: string): string | undefined
@@ -124,6 +132,7 @@ export interface SFCScriptCompileOptions {
   /**
    * Transform Vue SFCs into custom elements.
    */
+  // 是否将组件作为 CustomElement 编译（或一个判断函数）
   customElement?: boolean | ((filename: string) => boolean)
 }
 
@@ -1145,16 +1154,25 @@ function walkDeclaration(
   return isAllLiteral
 }
 
+// 专门用于处理 JavaScript 中的对象解构结构：
+// const { a, b: c, ...rest } = props
+// 遍历对象解构的各个属性（如 a、b: c、...rest）
+// 收集绑定变量的名字
+// 根据作用场景（是否 const、是否宏函数如 defineProps()）判断其绑定类型
+// 存入 bindings 字典中，供 compileScript 用于响应式处理、导出分析等
 function walkObjectPattern(
   node: ObjectPattern,
   bindings: Record<string, BindingTypes>,
   isConst: boolean,
   isDefineCall = false,
 ) {
+  // 每一项 p 是 ObjectProperty（普通键值）或 RestElement（剩余属性）
   for (const p of node.properties) {
     if (p.type === 'ObjectProperty') {
+      // 普通属性（ObjectProperty）
       if (p.key.type === 'Identifier' && p.key === p.value) {
         // shorthand: const { x } = ...
+        //  // 简写属性：const { x } = obj
         const type = isDefineCall
           ? BindingTypes.SETUP_CONST
           : isConst
@@ -1167,6 +1185,10 @@ function walkObjectPattern(
     } else {
       // ...rest
       // argument can only be identifier when destructuring
+      // 有别名的属性
+      // 比如 const { a: b } = obj：
+      // key 是 a，value 是 b
+      // 这里的绑定变量是 b，所以要递归调用 walkPattern(p.value) 来处理
       const type = isConst ? BindingTypes.SETUP_CONST : BindingTypes.SETUP_LET
       registerBinding(bindings, p.argument as Identifier, type)
     }
@@ -1174,6 +1196,11 @@ function walkObjectPattern(
 }
 
 function walkArrayPattern(
+  // 参数	说明
+  // node	Babel AST 的数组模式节点（ArrayPattern）
+  // bindings	当前变量到其绑定类型的记录表
+  // isConst	表示是否由 const 声明
+  // isDefineCall	是否来自宏调用（如 defineProps 解构）
   node: ArrayPattern,
   bindings: Record<string, BindingTypes>,
   isConst: boolean,
@@ -1184,7 +1211,13 @@ function walkArrayPattern(
   }
 }
 
+// 递归分析解构模式，识别出绑定变量，并为每个变量标注其响应式类型（BindingTypes）。
 function walkPattern(
+  // 参数名	含义
+  // node	一个 AST 节点（解构结构）
+  // bindings	变量名到绑定类型的映射表
+  // isConst	当前变量是否是 const
+  // isDefineCall	是否是宏调用（如 defineProps() 解构）
   node: Node,
   bindings: Record<string, BindingTypes>,
   isConst: boolean,
@@ -1192,20 +1225,24 @@ function walkPattern(
 ) {
   if (node.type === 'Identifier') {
     const type = isDefineCall
-      ? BindingTypes.SETUP_CONST
+      ? BindingTypes.SETUP_CONST // 宏解构，视为稳定常量
       : isConst
-        ? BindingTypes.SETUP_MAYBE_REF
-        : BindingTypes.SETUP_LET
+        ? BindingTypes.SETUP_MAYBE_REF // 普通 const 变量，可能是 ref
+        : BindingTypes.SETUP_LET // let/var 声明，视为普通响应式
     registerBinding(bindings, node, type)
   } else if (node.type === 'RestElement') {
     // argument can only be identifier when destructuring
+    // 如：const { ...rest } = obj
     const type = isConst ? BindingTypes.SETUP_CONST : BindingTypes.SETUP_LET
     registerBinding(bindings, node.argument as Identifier, type)
   } else if (node.type === 'ObjectPattern') {
+    // 嵌套结构：如 const { a: { b } } = obj，递归分析每个层级。
     walkObjectPattern(node, bindings, isConst)
   } else if (node.type === 'ArrayPattern') {
+    // 嵌套结构：如 const { a: { b } } = obj，递归分析每个层级。
     walkArrayPattern(node, bindings, isConst)
   } else if (node.type === 'AssignmentPattern') {
+    // 处理默认值：如 const { foo = 1 } = props，默认值不会影响绑定类型判断。
     if (node.left.type === 'Identifier') {
       const type = isDefineCall
         ? BindingTypes.SETUP_CONST
@@ -1219,27 +1256,33 @@ function walkPattern(
   }
 }
 
+// 判断某个 AST 节点是否不可能是 ref 类型（响应式引用）。
 function canNeverBeRef(node: Node, userReactiveImport?: string): boolean {
+  // 如果这个表达式是 reactive() 调用，那就直接返回 true：
+  // 因为 reactive() 返回的是对象代理，不是 ref，不能是 ref，因此 “不会是 ref”。
   if (isCallOf(node, userReactiveImport)) {
     return true
   }
   switch (node.type) {
-    case 'UnaryExpression':
-    case 'BinaryExpression':
-    case 'ArrayExpression':
-    case 'ObjectExpression':
-    case 'FunctionExpression':
-    case 'ArrowFunctionExpression':
-    case 'UpdateExpression':
-    case 'ClassExpression':
-    case 'TaggedTemplateExpression':
-      return true
+    case 'UnaryExpression': // 如：!x, -x
+    case 'BinaryExpression': // 如：x + y
+    case 'ArrayExpression': // 如：[1, 2]
+    case 'ObjectExpression': // 如：{ a: 1 }
+    case 'FunctionExpression': // 普通函数
+    case 'ArrowFunctionExpression': // 箭头函数
+    case 'UpdateExpression': // 如：i++
+    case 'ClassExpression': // 类表达式
+    case 'TaggedTemplateExpression': // 如：tag`template`
+      return true // 全部认为不会是 ref
     case 'SequenceExpression':
+      // 序列表达式 (1, 2) 的值取决于最后一个表达式，因此递归判断最后一个表达式即可。
       return canNeverBeRef(
         node.expressions[node.expressions.length - 1],
         userReactiveImport,
       )
     default:
+      // 其他类型中，如果是字面量（如数字、字符串、布尔值等），也返回 true。
+      // 否则，返回 false，表示有可能是 ref 类型。
       if (isLiteralNode(node)) {
         return true
       }
@@ -1247,10 +1290,13 @@ function canNeverBeRef(node: Node, userReactiveImport?: string): boolean {
   }
 }
 
+// 判断一个 AST 节点是否为“静态常量表达式”
 function isStaticNode(node: Node): boolean {
+  // 如果是 TypeScript 特有包装，去掉类型包装
   node = unwrapTSNode(node)
 
   switch (node.type) {
+    // 如：!true, -1
     case 'UnaryExpression': // void 0, !true
       return isStaticNode(node.argument)
 
@@ -1260,6 +1306,7 @@ function isStaticNode(node: Node): boolean {
 
     case 'ConditionalExpression': {
       // 1 ? 2 : 3
+      // 三元表达式：condition ? a : b
       return (
         isStaticNode(node.test) &&
         isStaticNode(node.consequent) &&
@@ -1268,12 +1315,14 @@ function isStaticNode(node: Node): boolean {
     }
 
     case 'SequenceExpression': // (1, 2)
-    case 'TemplateLiteral': // `foo${1}`
+    case 'TemplateLiteral': // `foo${1}`  // 模板字符串：`foo${1}`
       return node.expressions.every(expr => isStaticNode(expr))
 
+    // 括号包裹表达式：(1)
     case 'ParenthesizedExpression': // (1)
       return isStaticNode(node.expression)
 
+    // 以下是字面量常量，肯定是静态的
     case 'StringLiteral':
     case 'NumericLiteral':
     case 'BooleanLiteral':

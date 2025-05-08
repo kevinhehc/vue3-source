@@ -17,6 +17,8 @@ import type { RawSourceMap } from '@vue/compiler-core'
 import { cssVarsPlugin } from './style/cssVars'
 import postcssModules from 'postcss-modules'
 
+// Vue SFC (*.vue) 文件中 <style> 区块的 样式编译处理逻辑。这是构建 Vue 单文件组件时不可或缺的一个环节。
+
 export interface SFCStyleCompileOptions {
   source: string
   filename: string
@@ -68,6 +70,12 @@ export interface SFCStyleCompileResults {
   dependencies: Set<string>
 }
 
+// compileStyle() 和 compileStyleAsync() 的主要职责是将 <style> 块：
+// 编译预处理语言（如 SCSS、Less、Stylus）
+// 应用 PostCSS 插件（包括 scoped 插件、CSS Modules、CSS 变量处理器等）
+// 支持 Source Map 合并
+// 收集依赖文件（如 @import 的其他样式）
+// 返回最终样式代码和依赖分析信息
 export function compileStyle(
   options: SFCStyleCompileOptions,
 ): SFCStyleCompileResults {

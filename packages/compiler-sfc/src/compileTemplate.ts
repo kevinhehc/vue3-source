@@ -29,6 +29,9 @@ import consolidate from '@vue/consolidate'
 import { warnOnce } from './warn'
 import { genCssVarsFromList } from './style/cssVars'
 
+// 主要功能是将 <template> 区块编译为 JavaScript 渲染函数代码（render function），
+// 最终配合 <script> 和 <style> 共同构成 Vue 组件的运行代码。
+
 export interface TemplateCompiler {
   compile(source: string | RootNode, options: CompilerOptions): CodegenResult
   parse(template: string, options: ParserOptions): RootNode
@@ -45,6 +48,15 @@ export interface SFCTemplateCompileResults {
 }
 
 export interface SFCTemplateCompileOptions {
+  // 选项	说明
+  // source	模板源代码字符串
+  // preprocessLang	模板语言，如 'pug'
+  // preprocessCustomRequire	用于非 Node 环境中加载预处理器
+  // compiler	自定义模板编译器，默认是 @vue/compiler-dom 或 @vue/compiler-ssr
+  // scoped	是否开启 CSS scope ID
+  // ssr	是否为服务端渲染
+  // transformAssetUrls	是否转换资源地址为 import 表达式
+  // id	data-v-xxxx，唯一组件作用域标识
   source: string
   ast?: RootNode
   filename: string
@@ -104,6 +116,11 @@ function preprocess(
   return res
 }
 
+// 该方法处理 .vue 文件中的 <template> 区块，核心功能包括：
+// （可选）预处理模板语言（如 Pug、Jade、etc.）
+// 使用 Vue 模板编译器（默认是 @vue/compiler-dom）将模板编译为 render 函数代码
+// 生成 Source Map、AST、CSS 变量支持、Scoped CSS ID 插入等
+// 处理资源 URL (<img src=...>、srcset) 为动态导入语法（import）
 export function compileTemplate(
   options: SFCTemplateCompileOptions,
 ): SFCTemplateCompileResults {
