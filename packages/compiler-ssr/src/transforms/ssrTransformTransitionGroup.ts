@@ -16,6 +16,9 @@ import {
 } from '../ssrCodegenTransform'
 import { buildSSRProps } from './ssrTransformElement'
 
+// 由于 <transition-group> 本质上是一个容器组件，
+// 会渲染为某个指定的 HTML 标签（如 div、ul、span）或动态标签，所以编译逻辑和其他组件（如 <transition>）不同。
+
 const wipMap = new WeakMap<ComponentNode, WIPEntry>()
 
 interface WIPEntry {
@@ -25,10 +28,17 @@ interface WIPEntry {
 }
 
 // phase 1: build props
+// 提取 tag 属性并构建 SSR props 表达式，存入 wipMap
+// 这是第一阶段 transform，用于准备数据，后续 ssrProcess... 再真正生成输出。
 export function ssrTransformTransitionGroup(
   node: ComponentNode,
   context: TransformContext,
 ) {
+  // <transition-group tag="ul"> → 提取 tag="ul" 为 AttributeNode
+  // <transition-group :tag="dynamicTag"> → 提取为 DirectiveNode
+  // 然后提取其他 props 并生成：
+  // propsExp = SSR_RENDER_ATTRS(MERGE_PROPS(...))
+  // 最后放入 wipMap 缓存：
   return (): void => {
     const tag = findProp(node, 'tag')
     if (tag) {
@@ -47,6 +57,9 @@ export function ssrTransformTransitionGroup(
           buildSSRProps(props, directives, context),
         ])
       }
+      //         tag,          // tag prop (AttributeNode or DirectiveNode)
+      //         propsExp,     // props 渲染表达式
+      //         scopeId,      // CSS scoped ID
       wipMap.set(node, {
         tag,
         propsExp,
@@ -57,6 +70,8 @@ export function ssrTransformTransitionGroup(
 }
 
 // phase 2: process children
+// 用构建好的 tag + props 输出标签结构，渲染 children
+// 第二阶段，根据上一步的缓存，实际生成字符串：
 export function ssrProcessTransitionGroup(
   node: ComponentNode,
   context: SSRTransformContext,
@@ -64,8 +79,13 @@ export function ssrProcessTransitionGroup(
   const entry = wipMap.get(node)
   if (entry) {
     const { tag, propsExp, scopeId } = entry
+    // 一样拼接 props、scopeId，最终变成：
+    // <ul class="..." style="..." data-v-xxx>
+    //   ...children...
+    // </ul>
     if (tag.type === NodeTypes.DIRECTIVE) {
       // dynamic :tag
+      // 动态 tag（:tag="el"）
       context.pushStringPart(`<`)
       context.pushStringPart(tag.exp!)
       if (propsExp) {
@@ -100,6 +120,7 @@ export function ssrProcessTransitionGroup(
       context.pushStringPart(`>`)
     } else {
       // static tag
+      //  静态 tag（tag="ul"）
       context.pushStringPart(`<${tag.value!.content}`)
       if (propsExp) {
         context.pushStringPart(propsExp)

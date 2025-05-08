@@ -24,9 +24,19 @@ import {
 } from '../runtimeHelpers'
 import type { DirectiveTransformResult } from 'packages/compiler-core/src/transform'
 
+// Vue 3 SSR 编译器中处理 v-model 指令的核心逻辑，属于 ssrTransformModel 插件。
+// 它负责将 v-model 应用于各种 HTML 表单元素，并将其转化为适合 SSR 渲染的代码。
+
+// 将 <input v-model="foo"> 等转换为服务端可渲染的 DOM 属性（如 checked、value、selected）表达式，
+// 确保 服务端渲染出的 HTML 与客户端绑定的状态一致。
+
 export const ssrTransformModel: DirectiveTransform = (dir, node, context) => {
   const model = dir.exp!
 
+  // 避免以下冲突写法：
+  // <input v-model="foo" value="bar" /> <!-- 错误！ -->
+  // 此时会报错：
+  // X_V_MODEL_UNNECESSARY_VALUE
   function checkDuplicatedValue() {
     const value = findProp(node, 'value')
     if (value) {
@@ -77,6 +87,13 @@ export const ssrTransformModel: DirectiveTransform = (dir, node, context) => {
       // default value binding for text type inputs
       createObjectProperty(`value`, model),
     ]
+    // 根据 node.tag 的不同，分别处理：
+    // 元素类型	行为
+    // <input>	根据 type 生成 checked 或 value 属性
+    // <textarea>	插入内容文本（由 model 表达式渲染）
+    // <select> 和 <option>	标记 <option selected>
+    // 组件	转发给 transformModel(...)
+    // 其他标签	报错（非法用法）
     if (node.tag === 'input') {
       const type = findProp(node, 'type')
       if (type) {
@@ -189,6 +206,13 @@ export const ssrTransformModel: DirectiveTransform = (dir, node, context) => {
     // component v-model
     return transformModel(dir, node, context)
   }
+  // 表单类型	SSR 编译行为
+  // input[type=text]	输出 value="{{ model }}"
+  // input[type=checkbox]	输出 checked 取决于数组包含或布尔值
+  // input[type=radio]	输出 checked 判断值相等
+  // textarea	直接用 {{ model }} 插入为 children
+  // select + option	根据是否匹配设定 selected 属性
+  // 组件	使用 transformModel()
 }
 
 function findValueBinding(node: PlainElementNode): ExpressionNode {

@@ -29,21 +29,35 @@ import { ssrProcessComponent } from './transforms/ssrTransformComponent'
 import { ssrProcessElement } from './transforms/ssrTransformElement'
 import { SSRErrorCodes, createSSRCompilerError } from './errors'
 
+// 第二遍遍历的核心执行器，称为 ssrCodegenTransform，它最终会把模板的 AST（抽象语法树）转为服务端可执行的 JavaScript 渲染函数代码。
+// 核心目标
+// 将模板 AST 编译为 SSR 渲染函数体，例如：
+// function ssrRender(_ctx, _push, _parent, _attrs) {
+//   _push(`<div>Hello</div>`)
+// }
+
 // Because SSR codegen output is completely different from client-side output
 // (e.g. multiple elements can be concatenated into a single template literal
 // instead of each getting a corresponding call), we need to apply an extra
 // transform pass to convert the template AST into a fresh JS AST before
 // passing it to codegen.
 
+// 这是 SSR 代码生成的主入口函数
 export function ssrCodegenTransform(
   ast: RootNode,
   options: CompilerOptions,
 ): void {
+  // 创建 SSR 编译上下文
+  // 这个 context 封装了：
+  // 输出代码块 context.body
+  // 工具函数：如 pushStringPart() / pushStatement()
+  // helpers 收集器：用于跟踪需要 import 的 runtime 函数
   const context = createSSRTransformContext(ast, options)
 
   // inject SFC <style> CSS variables
   // we do this instead of inlining the expression to ensure the vars are
   // only resolved once per render
+  // 注入 _cssVars（若有）
   if (options.ssrCssVars) {
     const cssContext = createTransformContext(createRoot([]), options)
     const varsExp = processExpression(
@@ -58,13 +72,22 @@ export function ssrCodegenTransform(
     })
   }
 
+  // 调用 processChildren(...) 渲染所有子节点
+  // 会根据每个节点的类型调用对应的处理函数：
+  // <div> → ssrProcessElement
+  // <Comp> → ssrProcessComponent
+  // v-if → ssrProcessIf
+  // {{ expression }} → 插入 _push(_interpolate(...))
   const isFragment =
     ast.children.length > 1 && ast.children.some(c => !isText(c))
   processChildren(ast, context, isFragment)
+  // 构建最终的 codegenNode
+  // 这就是 SSR 渲染函数的函数体。
   ast.codegenNode = createBlockStatement(context.body)
 
   // Finalize helpers.
   // We need to separate helpers imported from 'vue' vs. '@vue/server-renderer'
+  // 拆分 helpers：
   ast.ssrHelpers = Array.from(
     new Set([
       ...Array.from(ast.helpers).filter(h => h in ssrHelpers),
@@ -151,6 +174,16 @@ interface Container {
   children: TemplateChildNode[]
 }
 
+// 递归遍历 AST 子节点的核心
+// 如果 asFragment，会插入 <!--[--> ... <!--]-->
+// 遍历每个 child：
+// ELEMENT → 调用 ssrProcessElement
+// COMPONENT → 调用 ssrProcessComponent
+// TEXT → 插入字符串
+// INTERPOLATION → 调用 _interpolate(...)
+// COMMENT → 输出 <!-- comment -->
+// IF → 调用 ssrProcessIf
+// FOR → 调用 ssrProcessFor
 export function processChildren(
   parent: Container,
   context: SSRTransformContext,
@@ -239,6 +272,14 @@ export function processChildren(
   }
 }
 
+// 我们需要在 FunctionExpression.body 或 IfStatement.consequent 等位置插入 BlockStatement，会调用这个函数。
+// 创建新的 SSRTransformContext（继承父上下文）
+// 执行 processChildren(...)
+// 把上下文中的 body 封装为 createBlockStatement(...)
+// 用于生成：
+// () => {
+//   _push(`<div>slot content</div>`)
+// }
 export function processChildrenAsStatement(
   parent: Container,
   parentContext: SSRTransformContext,

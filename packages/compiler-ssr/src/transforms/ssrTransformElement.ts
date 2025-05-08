@@ -65,7 +65,23 @@ const rawChildrenMap = new WeakMap<
   TemplateLiteral['elements'][0]
 >()
 
+// transform 阶段：生成 node.ssrCodegenNode（开标签）并记录覆盖性 raw children
+// 这个 transform 函数会：
+// 生成开标签 TemplateLiteral['elements']，保存为 node.ssrCodegenNode
+// 处理 props（静态 + 动态）
+// 检测和处理特殊指令（v-text、v-html、v-model）
+// 为特殊场景设置 rawChildrenMap
 export const ssrTransformElement: NodeTransform = (node, context) => {
+  // 特殊场景解析
+  // 1、v-text / v-html
+  // v-text="msg"：用 {{ msg }} 替代子节点，并设置为 interpolation node
+  // v-html="html"：将 rawChildrenMap[node] = (html) ?? ''，跳过子节点编译
+  // 这保证 SSR 渲染中只输出一次 HTML 字符串，不会和静态 children 混淆
+  //
+  // 2、v-bind="obj" + v-model
+  // 动态绑定可能影响 <input> 的 .value、<textarea> 的内容等：
+  // 对 <textarea> 生成 textContent = obj.value ?? staticText
+  // 对 <input v-model="x" v-bind="obj"> 生成合并后的 MERGE_PROPS(obj, getDynamicModelProps(...))
   if (
     node.type !== NodeTypes.ELEMENT ||
     node.tagType !== ElementTypes.ELEMENT
@@ -356,6 +372,7 @@ export const ssrTransformElement: NodeTransform = (node, context) => {
   }
 }
 
+// 构建 SSR props（合并 v-bind / 指令）
 export function buildSSRProps(
   props: PropsExpression | undefined,
   directives: DirectiveNode[],
@@ -438,6 +455,7 @@ function findVModel(node: PlainElementNode): DirectiveNode | undefined {
   ) as DirectiveNode | undefined
 }
 
+// process 阶段：输出开标签、子节点内容、闭标签
 export function ssrProcessElement(
   node: PlainElementNode,
   context: SSRTransformContext,
