@@ -19,6 +19,19 @@ import {
   defaultAssetUrlOptions,
 } from './transformAssetUrl'
 
+// Vue 模板编译器中的另一个资源处理插件 —— transformSrcset，用于处理 <img srcset="..."> 或 <source srcset="..."> 中的多图片资源路径。
+// 它的功能与 transformAssetUrl 类似，但专门为 srcset 属性设计，支持多个图像候选项（responsive images）。
+
+// 示例：
+// 原始模板：
+// <img srcset="./img@1x.png 1x, ./img@2x.png 2x">
+// 转换为：
+// import _imports_0 from './img@1x.png'
+// import _imports_1 from './img@2x.png'
+// <img :srcset="_imports_0 + ' 1x, ' + _imports_1 + ' 2x'">
+
+// 只有 <img> 和 <source> 标签会被处理，并且属性名必须是 srcset。
+
 const srcsetTags = ['img', 'source']
 
 interface ImageCandidate {
@@ -42,16 +55,22 @@ export const transformSrcset: NodeTransform = (
   options: Required<AssetURLOptions> = defaultAssetUrlOptions,
 ) => {
   if (node.type === NodeTypes.ELEMENT) {
+    // 当满足以下条件时开始处理：
+    // 节点类型是 HTML 元素（NodeTypes.ELEMENT）
+    // 标签名是 img 或 source
+    // 存在 srcset 属性
     if (srcsetTags.includes(node.tag) && node.props.length) {
       node.props.forEach((attr, index) => {
         if (attr.name === 'srcset' && attr.type === NodeTypes.ATTRIBUTE) {
           if (!attr.value) return
           const value = attr.value.content
           if (!value) return
+          // 分解 srcset 值为图片候选项
           const imageCandidates: ImageCandidate[] = value.split(',').map(s => {
             // The attribute value arrives here with all whitespace, except
             // normal spaces, represented by escape sequences
             const [url, descriptor] = s
+              // 空格使用 escapedSpaceCharacters 正则标准化。
               .replace(escapedSpaceCharacters, ' ')
               .trim()
               .split(' ', 2)
@@ -69,6 +88,10 @@ export const transformSrcset: NodeTransform = (
             }
           }
 
+          // 判断哪些路径需要处理
+          // 只处理：
+          // 相对路径（如 ./a.png）
+          // 显式配置为 includeAbsolute: true 时，也处理绝对路径（如 /images/b.png）
           const shouldProcessUrl = (url: string) => {
             return (
               !isExternalUrl(url) &&
@@ -81,6 +104,10 @@ export const transformSrcset: NodeTransform = (
             return
           }
 
+          // 当 options.base 存在：
+          // 以 . 开头的路径使用 path.join(base, url)
+          // 转换后赋值回 attr.value.content
+          // 若还有无法处理的路径（非相对路径），则标记为需导入
           if (options.base) {
             const base = options.base
             const set: string[] = []
@@ -105,6 +132,11 @@ export const transformSrcset: NodeTransform = (
             }
           }
 
+          // 处理方式二：转为动态导入表达式（默认）
+          // 构造一个 CompoundExpressionNode 复合表达式：
+          // 所有路径都转为 _imports_n
+          // 字符串拼接保持顺序与原 srcset 一致
+          // 可开启 hoistStatic 提升性能
           const compoundExpression = createCompoundExpression([], attr.loc)
           imageCandidates.forEach(({ url, descriptor }, index) => {
             if (shouldProcessUrl(url)) {
@@ -133,6 +165,7 @@ export const transformSrcset: NodeTransform = (
                 compoundExpression.children.push(exp)
               }
             } else {
+              // createSrcsetTransformWithOptions(...) 是工厂函数，供外部注册插件使用：
               const exp = createSimpleExpression(
                 `"${url}"`,
                 false,
