@@ -8,9 +8,16 @@ import {
 import selectorParser from 'postcss-selector-parser'
 import { warn } from '../warn'
 
+// 实现的是 Vue SFC 编译器中处理 <style scoped> 的 PostCSS 插件：vue-sfc-scoped。
+// 它的核心目标是确保组件的样式作用域限制在本组件内，不会影响或被外部样式污染。
+
 const animationNameRE = /^(-\w+-)?animation-name$/
 const animationRE = /^(-\w+-)?animation$/
 
+// 定义一个 PostCSS 插件，它在以下阶段处理样式：
+// Rule()：处理每个样式规则，插入 [data-v-xxxxxx] 作用域选择器
+// AtRule()：处理 @keyframes，自动给动画名称加上作用域 ID
+// OnceExit()：在所有节点处理完后，修正动画名引用（animation-name, animation）
 const scopedPlugin: PluginCreator<string> = (id = '') => {
   const keyframes = Object.create(null)
   const shortId = id.replace(/^data-v-/, '')
@@ -67,6 +74,10 @@ const scopedPlugin: PluginCreator<string> = (id = '') => {
 
 const processedRules = new WeakSet<Rule>()
 
+// 核心功能：在选择器后添加 [data-v-xxxxxx] 以实现作用域隔离。
+// 跳过 @keyframes 中的规则
+// 判断当前规则是否在 :deep() 中
+// 使用 selectorParser 替换选择器：调用 rewriteSelector
 function processRule(id: string, rule: Rule) {
   if (
     processedRules.has(rule) ||
@@ -93,6 +104,19 @@ function processRule(id: string, rule: Rule) {
   }).processSync(rule.selector)
 }
 
+// 这是处理每个选择器的核心逻辑，功能强大复杂，支持：
+// 自动插入 [data-v-id]
+// 插入位置智能识别：
+// 普通选择器末尾插入
+// 通配符 * 特殊处理
+// :is() / :where() 中递归处理
+
+// 原始语法	       转换逻辑
+// :deep(.a)	   .a 不加作用域
+// .a :deep(.b)	   .a[data-v-id] .b
+// ::v-deep .b	   同上（兼容老语法）
+// :slotted(.a)	   .a[data-v-id-s] 只作用 slotted 元素
+// :global(.a)	   .a 不加作用域，跳过注入
 function rewriteSelector(
   id: string,
   rule: Rule,
@@ -281,6 +305,7 @@ function isSpaceCombinator(node: selectorParser.Node) {
   return node.type === 'combinator' && /^\s+$/.test(node.value)
 }
 
+// 把规则内的 decl（声明）和 comment 提取并包进一个新规则：
 function extractAndWrapNodes(parentNode: Rule | AtRule) {
   if (!parentNode.nodes) return
   const nodes = parentNode.nodes.filter(

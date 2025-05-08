@@ -171,6 +171,8 @@ export const cssVarsPlugin: PluginCreator<CssVarsPluginOptions> = opts => {
 }
 cssVarsPlugin.postcss = true
 
+// 生成注入到 Vue runtime 的 _useCssVars(_ctx => (...)) 代码，用于运行时将变量注入到组件根元素 style 中。
+// 会通过 Vue 的 AST transform API 将生成的表达式转换为完整代码字符串
 export function genCssVarsCode(
   vars: string[],
   bindings: BindingMetadata,
