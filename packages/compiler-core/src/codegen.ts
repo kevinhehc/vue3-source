@@ -216,6 +216,7 @@ function createCodegenContext(
     pure: false,
     map: undefined,
     // 用于从 helperNameMap 中取出辅助函数的名称（如 _toDisplayString）。
+    // 给方法加上下划线
     helper(key) {
       return `_${helperNameMap[key]}`
     },
