@@ -1,4 +1,4 @@
-// internal runtime helpers
+//  internal runtime helpers
 export { renderVNode as ssrRenderVNode } from './render'
 export { ssrRenderComponent } from './helpers/ssrRenderComponent'
 export { ssrRenderSlot, ssrRenderSlotInner } from './helpers/ssrRenderSlot'

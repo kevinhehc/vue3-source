@@ -13,22 +13,47 @@ import { resolveTeleports } from './renderToString'
 
 const { isVNode } = ssrUtils
 
+// 用于输出流式 HTML 的一个最简版可读流接口 SimpleReadable，它并不是 Node.js 原生的 ReadableStream，而是一个轻量的、内部使用的抽象接口。
 export interface SimpleReadable {
+  // push(chunk: string | null): void
+  // 功能：将数据块“推送”到流中。
+  // 参数说明：
+  // chunk: string 表示一段渲染好的 HTML 字符串。
+  // null 表示流已经结束。
+  // 类似于 Node.js 的 readable.push(...)。
+  // 2. destroy(err: any): void
+  // 功能：在遇到错误时销毁这个流。
+  // 参数 err 是传入的异常对象。
+  // 类似于 Node.js 的 readable.destroy(err)。
   push(chunk: string | null): void
   destroy(err: any): void
 }
 
+// 用于将 SSR 渲染缓冲区（SSRBuffer）逐步写入流（SimpleReadable）中，并处理异步内容。
 async function unrollBuffer(
+  // buffer：SSR 渲染缓冲区，内部是嵌套数组，可能包含：
+  // 字符串
+  // Promise（异步组件）
+  // 嵌套 SSRBuffer
+  // stream：输出接口，用于将字符串块写入响应流（HTML 内容逐步发出）。
   buffer: SSRBuffer,
   stream: SimpleReadable,
 ): Promise<void> {
   if (buffer.hasAsync) {
+    // SSR 渲染时标记过：buffer.hasAsync = true 表示其中包含 Promise。
+    // 此时必须逐项 await 展开。
     for (let i = 0; i < buffer.length; i++) {
+      // 逐项处理，每一项可能是：
+      // 字符串 → 直接推入
+      // Promise → 先 await 再处理
+      // 子 buffer → 递归展开
       let item = buffer[i]
       if (isPromise(item)) {
         item = await item
       }
       if (isString(item)) {
+        // 如果是字符串，直接写入 stream.push(...)。
+        // 如果是嵌套的 SSRBuffer，递归调用 unrollBuffer 处理它。
         stream.push(item)
       } else {
         await unrollBuffer(item, stream)
@@ -37,10 +62,14 @@ async function unrollBuffer(
   } else {
     // sync buffer can be more efficiently unrolled without unnecessary await
     // ticks
+    // 如果 buffer 没有异步内容，则使用同步版本 unrollBufferSync：
+    // 避免不必要的 await，更高效。
+    // 处理流程相同，但更快。
     unrollBufferSync(buffer, stream)
   }
 }
 
+// 用于将 同步的 SSR 渲染缓冲区 (SSRBuffer) 写入流 (SimpleReadable) 中
 function unrollBufferSync(buffer: SSRBuffer, stream: SimpleReadable) {
   for (let i = 0; i < buffer.length; i++) {
     let item = buffer[i]

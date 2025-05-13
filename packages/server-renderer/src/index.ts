@@ -1,7 +1,7 @@
 import { initDirectivesForSSR } from 'vue'
 initDirectivesForSSR()
 
-// public
+//  public
 export type { SSRContext } from './render'
 
 // 核心方法
