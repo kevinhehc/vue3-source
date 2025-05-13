@@ -36,6 +36,12 @@ import {
   toDisplayString,
 } from '@vue/shared'
 
+// 将符合条件的静态节点合并并转换为 createStaticVNode() 调用，以提升渲染性能、减少客户端 patch 工作量、加快 hydration。
+
+// 每一组 chunk 最大合并：
+// 20 个节点 或
+// 5 个带绑定的元素
+// 超出这两个值后就停止继续合并。
 export enum StringifyThresholds {
   ELEMENT_WITH_BINDING_COUNT = 5,
   NODE_COUNT = 20,
@@ -96,6 +102,10 @@ export const stringifyStatic: HoistTransform = (children, context, parent) => {
       ec >= StringifyThresholds.ELEMENT_WITH_BINDING_COUNT
     ) {
       // combine all currently eligible nodes into a single static vnode call
+      // 核心逻辑：生成 createStaticVNode(...)
+      // 将所有 chunk 中的节点字符串拼接，并传入 createStaticVNode(...)；
+      // 第二个参数是节点数量，方便 hydration；
+      // 替换 __VUE_EXP_START__...__VUE_EXP_END__ 占位符为插值表达式拼接。
       const staticCall = createCallExpression(context.helper(CREATE_STATIC), [
         JSON.stringify(
           currentChunk.map(node => stringifyNode(node, context)).join(''),
@@ -107,11 +117,13 @@ export const stringifyStatic: HoistTransform = (children, context, parent) => {
 
       const deleteCount = currentChunk.length - 1
 
+      // 根据是否缓存父节点，有不同的替换方式：
       if (isParentCached) {
         // if the parent is cached, then `children` is also the value of the
         // CacheExpression. Just replace the corresponding range in the cached
         // list with staticCall.
         children.splice(
+          // 直接替换整个子节点数组
           currentIndex - currentChunk.length,
           currentChunk.length,
           // @ts-expect-error
@@ -122,7 +134,7 @@ export const stringifyStatic: HoistTransform = (children, context, parent) => {
         ;(currentChunk[0].codegenNode as CacheExpression).value = staticCall
         if (currentChunk.length > 1) {
           // remove merged nodes from children
-          children.splice(currentIndex - currentChunk.length + 1, deleteCount)
+          children.splice(currentIndex - currentChunk.length + 1, deleteCount) // 删除合并的后续节点
           // also adjust index for the remaining cache items
           const cacheIndex = context.cached.indexOf(
             currentChunk[currentChunk.length - 1]
@@ -160,6 +172,7 @@ export const stringifyStatic: HoistTransform = (children, context, parent) => {
     // we only reach here if we ran into a node that is not stringifiable
     // check if currently analyzed nodes meet criteria for stringification.
     // adjust iteration index
+    //  // 到达不可序列化节点，尝试字符串化当前 chunk
     i -= stringifyCurrentChunk(i)
     // reset state
     nc = 0
@@ -286,6 +299,12 @@ function analyzeNode(node: StringifiableNode): [number, number] | false {
   return walk(node) ? [nc, ec] : false
 }
 
+// 用于判断一个节点是否可以被字符串化为 HTML：
+// 不能含有非静态绑定；
+// 不能包含 <caption>、<thead> 等结构化表格标签；
+// <option :value="..."> 的绑定必须是静态值；
+// 指令表达式必须是可序列化常量（constType >= CAN_STRINGIFY）；
+// 返回 [节点数, 含绑定元素数] 或 false（无法字符串化）。
 function stringifyNode(
   node: string | TemplateChildNode,
   context: TransformContext,
@@ -315,6 +334,13 @@ function stringifyNode(
   }
 }
 
+// stringifyNode 和 stringifyElement
+// 将 AST 节点转为 HTML 字符串：
+// 文本节点 → HTML escaped 文本；
+// 注释 → <!-- comment -->；
+// 插值表达式 → 常量表达式转字符串；
+// 绑定属性（:class, :style 等） → 评估常量表达式结果；
+// 特殊处理 v-text, v-html，用于填充 innerHTML。
 function stringifyElement(
   node: ElementNode,
   context: TransformContext,
@@ -395,6 +421,9 @@ function stringifyElement(
 // run JSFuck in here. But we mark it unsafe for security review purposes.
 // (see compiler-core/src/transforms/transformExpression)
 function evaluateConstant(exp: ExpressionNode): string {
+  // 只评估已知静态表达式；
+  // 非法内容（如括号）会在前置阶段被过滤；
+  // 安全可控，但标注为 __UNSAFE__ 供审计。
   if (exp.type === NodeTypes.SIMPLE_EXPRESSION) {
     return new Function(`return (${exp.content})`)()
   } else {

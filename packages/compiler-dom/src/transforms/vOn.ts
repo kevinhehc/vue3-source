@@ -27,9 +27,15 @@ const isNonKeyModifier = /*@__PURE__*/ makeMap(
     `middle`,
 )
 // left & right could be mouse or key modifiers based on event type
+// 这些是 addEventListener 的第三个参数中的选项修饰符，会直接影响事件监听器的注册行为。
 const maybeKeyModifier = /*@__PURE__*/ makeMap('left,right')
 const isKeyboardEvent = /*@__PURE__*/ makeMap(`onkeyup,onkeydown,onkeypress`)
 
+// 用于分类解析修饰符
+// keyModifiers：与键盘事件相关的修饰符（如 .enter, .esc）；
+// nonKeyModifiers：其他需要运行时守卫的修饰符（如 .stop, .prevent, .self）；
+// eventOptionModifiers：事件选项修饰符（如 .capture, .once, .passive）。
+// 其中 maybeKeyModifier('left') 需要根据事件类型动态判定它是键盘还是鼠标修饰符。
 const resolveModifiers = (
   key: ExpressionNode,
   modifiers: SimpleExpressionNode[],
@@ -89,6 +95,10 @@ const resolveModifiers = (
   }
 }
 
+// 对 .right 和 .middle 修饰符的特殊处理：
+// .right 实际映射为 contextmenu 事件；
+// .middle 映射为 mouseup；
+// 原因：click.right 和 click.middle 不会触发，需要替换事件名。
 const transformClick = (key: ExpressionNode, event: string) => {
   const isStaticClick =
     isStaticExp(key) && key.content.toLowerCase() === 'onclick'
@@ -105,6 +115,7 @@ const transformClick = (key: ExpressionNode, event: string) => {
       : key
 }
 
+// 这是 v-on 指令的主转换器，基于 baseTransform（通用事件处理转换器）实现，核心在于对事件修饰符的加工。
 export const transformOn: DirectiveTransform = (dir, node, context) => {
   return baseTransform(dir, node, context, baseResult => {
     const { modifiers } = dir

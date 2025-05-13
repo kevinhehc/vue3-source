@@ -4,7 +4,7 @@ import {
   type SourceLocation,
   createCompilerError,
 } from '@vue/compiler-core'
-
+// 错误提示
 export interface DOMCompilerError extends CompilerError {
   code: DOMErrorCodes
 }
