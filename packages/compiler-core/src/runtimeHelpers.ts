@@ -1,7 +1,7 @@
 // 这行定义了一个唯一的 Symbol，名字在开发环境下是 "Fragment"，生产环境下是空字符串（节省体积）。
 // Symbol() 是全局唯一的，因此可以保证不会与用户变量名冲突。
 // __DEV__ 是构建时的条件编译宏，仅在开发环境为 true。
-// unique symbol 是 TypeScript 的语法，确保类型系统能正确追踪该常量的唯一性。
+// unique symbol 是 TypeScript 的语法，确保类型系统能正确追踪该常量的唯一性 。
 export const FRAGMENT: unique symbol = Symbol(__DEV__ ? `Fragment` : ``)
 export const TELEPORT: unique symbol = Symbol(__DEV__ ? `Teleport` : ``)
 export const SUSPENSE: unique symbol = Symbol(__DEV__ ? `Suspense` : ``)
