@@ -1,4 +1,5 @@
 import { registerRuntimeHelpers } from '@vue/compiler-dom'
+// 桥梁
 
 export const SSR_INTERPOLATE: unique symbol = Symbol(`ssrInterpolate`)
 export const SSR_RENDER_VNODE: unique symbol = Symbol(`ssrRenderVNode`)
