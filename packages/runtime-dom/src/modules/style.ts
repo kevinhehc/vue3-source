@@ -11,6 +11,12 @@ type Style = string | Record<string, string | string[]> | null
 
 const displayRE = /(^|;)\s*display\s*:/
 
+// 功能	                实现方式
+// 更新 style 对象	    对比新旧对象 key，逐一更新
+// 处理 style 字符串	    直接赋值 style.cssText
+// 自动添加前缀	        autoPrefix()
+// 支持 !important	    通过 style.setProperty 设置
+// 兼容 v-show	        维护 display 显隐状态
 export function patchStyle(el: Element, prev: Style, next: Style): void {
   const style = (el as HTMLElement).style
   const isCssString = isString(next)
@@ -67,6 +73,12 @@ export function patchStyle(el: Element, prev: Style, next: Style): void {
 const semicolonRE = /[^\\];\s*$/
 const importantRE = /\s*!important$/
 
+// 功能	              描述
+// 数组值	          递归处理（如：['1px solid red', '1px dashed blue']）
+// --custom-prop	  用 style.setProperty(name, val)
+// 普通 prop	          用自动前缀后 style[prop] = val
+// !important	      统一用 setProperty(..., ..., 'important')
+// dev 提示	          检查是否意外包含 ;（容易出错）
 function setStyle(
   style: CSSStyleDeclaration,
   name: string,
@@ -104,7 +116,10 @@ function setStyle(
 
 const prefixes = ['Webkit', 'Moz', 'ms']
 const prefixCache: Record<string, string> = {}
-
+// 浏览器兼容性处理
+// 使用 Webkit, Moz, ms 三种前缀尝试构建兼容名
+// 缓存在 prefixCache 中避免重复计算
+// 最终用于处理如 transform, user-select 等属性
 function autoPrefix(style: CSSStyleDeclaration, rawName: string): string {
   const cached = prefixCache[rawName]
   if (cached) {

@@ -43,6 +43,24 @@ import {
 } from '@vue/shared'
 import { createApp, createSSRApp, render } from '.'
 
+// 是 Vue 自定义元素的内部基类，封装了：
+// 功能	方法或字段
+// 初始化挂载	_mount()
+// 属性更新反射	_setProp, _setAttr
+// 插槽解析	_parseSlots(), _renderSlots()
+// 样式注入	_applyStyles()
+// 支持异步组件	_resolveDef()
+// 支持 emit() → DOM 事件	拦截 emit()
+// 组件实例存储	_instance, _app, _createVNode()
+
+// 用 Vue 的语法和组件模型定义标准的 Custom Elements，并自动支持：
+// Shadow DOM 渲染（可选）
+// props 映射（HTML 属性 ⇄ Vue props）
+// 事件转发（emit → dispatchEvent）
+// 插槽支持
+// 样式隔离与注入
+// SSR 支持（通过 defineSSRCustomElement）
+
 // marker for attr removal
 const REMOVAL = {}
 

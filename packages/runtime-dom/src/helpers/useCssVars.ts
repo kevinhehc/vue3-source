@@ -17,6 +17,11 @@ export const CSS_VAR_TEXT: unique symbol = Symbol(__DEV__ ? 'CSS_VAR_TEXT' : '')
  * Runtime helper for SFC's CSS variable injection feature.
  * @private
  */
+// 参数 getter 是一个函数，返回一个 CSS 变量的对象
+// 它会在：
+// onMounted 时注入变量
+// 组件更新时重新注入
+// teleport 目标也会注入
 export function useCssVars(getter: (ctx: any) => Record<string, string>): void {
   if (!__BROWSER__ && !__TEST__) return
 

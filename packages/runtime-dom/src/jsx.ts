@@ -28,6 +28,9 @@
 
 import type * as CSS from 'csstype'
 
+// 支持驼峰 (backgroundColor) 和连字符 (background-color)
+// 支持自定义 CSS 变量：[v: \--${string}`]`
+// StyleValue 是嵌套支持形式（对象/数组/字符串等）
 export interface CSSProperties
   extends CSS.Properties<string | number>,
     CSS.PropertiesHyphen<string | number> {
@@ -252,6 +255,12 @@ export type StyleValue =
   | CSSProperties
   | Array<StyleValue>
 
+// 基础 HTML 元素属性定义：
+// 标准属性（id, class, style, title, lang, ...）
+// 布尔属性（hidden, disabled, autofocus, ...）
+// 非标准属性（autosave, unselectable, ...）
+// aria-* 辅助访问属性（通过继承 AriaAttributes）
+// 所有 onEvent 事件监听器（通过继承 EventHandlers<Events>）
 export interface HTMLAttributes extends AriaAttributes, EventHandlers<Events> {
   innerHTML?: string
 
@@ -1089,6 +1098,9 @@ export interface SVGAttributes extends AriaAttributes, EventHandlers<Events> {
   zoomAndPan?: string
 }
 
+// 定义了每个标签名对应的属性类型
+// 是 JSX 中 <div ... /> 标签名合法性和属性验证的核心
+// 最终可通过 NativeElements 类型被导出用于完整组件推导
 export interface IntrinsicElementAttributes {
   a: AnchorHTMLAttributes
   abbr: HTMLAttributes
@@ -1384,6 +1396,8 @@ export interface Events {
   onTransitionstart: TransitionEvent
 }
 
+// 事件名 → 类型映射（如 onClick: MouseEvent）
+// 保证事件监听器在模板中绑定时是类型安全的
 type EventHandlers<E> = {
   [K in keyof E]?: E[K] extends (...args: any) => any
     ? E[K]
@@ -1392,6 +1406,8 @@ type EventHandlers<E> = {
 
 import type { VNodeRef } from '@vue/runtime-core'
 
+// Vue 运行时专用保留属性（不会作为 DOM 属性设置）
+// 用于区分普通 props 和特殊 VNode 级别的控制字段
 export type ReservedProps = {
   key?: PropertyKey
   ref?: VNodeRef

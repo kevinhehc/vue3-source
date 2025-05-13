@@ -33,6 +33,18 @@ export function removeEventListener(
 
 const veiKey: unique symbol = Symbol('_vei')
 
+// patchEvent(el, 'onClick', null, () => count++)
+// 内部做：
+// 创建 invoker
+// 保存到 el[veiKey].onClick
+// 绑定 el.addEventListener('click', invoker)
+
+// patchEvent 是 Vue 在更新 DOM 时，用于绑定 / 更新 / 移除事件监听器 的函数。
+// 它做了：
+// 解析事件名和修饰符（如 onClickOnceCapture）
+// 复用事件函数（invoker）以避免重复绑定
+// 封装事件处理逻辑，加时间戳防止微任务重复触发
+// 支持数组事件、多事件、stopImmediatePropagation 控制
 export function patchEvent(
   el: Element & { [veiKey]?: Record<string, Invoker | undefined> },
   rawName: string,

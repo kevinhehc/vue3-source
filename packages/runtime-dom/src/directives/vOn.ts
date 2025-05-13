@@ -49,6 +49,12 @@ const modifierGuards: Record<
 /**
  * @private
  */
+// 包装一个事件处理函数，使其在特定修饰符条件满足时才触发。
+// 支持的修饰符
+// 行为类: 'stop', 'prevent', 'self'
+// 按键类: 'ctrl', 'shift', 'alt', 'meta'
+// 鼠标类: 'left', 'middle', 'right'
+// 精确匹配: 'exact'
 export const withModifiers = <
   T extends (event: Event, ...args: unknown[]) => any,
 >(
@@ -87,6 +93,13 @@ const keyNames: Record<
 /**
  * @private
  */
+// 包装一个键盘事件处理函数，仅在按下特定键时才触发。
+// 支持的 key 名（兼容 Vue 2）
+// esc, space, up, down, left, right, delete
+// 示例：只在按下 "Escape" 时触发
+// const handler = (e: KeyboardEvent) => console.log('ESC pressed')
+// const wrapped = withKeys(handler, ['esc'])
+// window.addEventListener('keydown', wrapped)
 export const withKeys = <T extends (event: KeyboardEvent) => any>(
   fn: T & { _withKeys?: { [k: string]: T } },
   modifiers: string[],

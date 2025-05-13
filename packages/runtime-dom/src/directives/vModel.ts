@@ -47,6 +47,11 @@ type ModelDirective<T, Modifiers extends string = string> = ObjectDirective<
 
 // We are exporting the v-model runtime directly as vnode hooks so that it can
 // be tree-shaken in case v-model is never used.
+// 普通文本输入（<input>、<textarea>）
+// 特性支持：
+// .lazy: 用 change 而不是 input 事件
+// .trim: 自动 .trim() 用户输入
+// .number: 自动转为 number
 export const vModelText: ModelDirective<
   HTMLInputElement | HTMLTextAreaElement,
   'trim' | 'number' | 'lazy'
@@ -117,6 +122,14 @@ export const vModelText: ModelDirective<
   },
 }
 
+// 复选框
+// 支持：
+// Array 模型
+// Set 模型
+// 普通 boolean 模型
+// :true-value / :false-value
+// 工作逻辑：
+// 判断绑定值是否为数组、Set、boolean，然后根据勾选状态更新数据。
 export const vModelCheckbox: ModelDirective<HTMLInputElement> = {
   // #4096 array checkboxes need to be deep traversed
   deep: true,
@@ -183,6 +196,12 @@ function setChecked(
   }
 }
 
+// 单选框
+// el.checked = looseEqual(value, vnode.props!.value)
+// 更改事件：
+// addEventListener(el, 'change', () => {
+//   el[assignKey](getValue(el))
+// })
 export const vModelRadio: ModelDirective<HTMLInputElement> = {
   created(el, { value }, vnode) {
     el.checked = looseEqual(value, vnode.props!.value)
@@ -199,6 +218,11 @@ export const vModelRadio: ModelDirective<HTMLInputElement> = {
   },
 }
 
+// 下拉框
+// 特性：
+// 支持 multiple
+// 支持 Set
+// 支持 .number
 export const vModelSelect: ModelDirective<HTMLSelectElement, 'number'> = {
   // <select multiple> value need to be deep traversed
   deep: true,
@@ -290,6 +314,7 @@ function getCheckboxValue(
   return key in el ? el[key] : checked
 }
 
+// 在运行时根据 tagName + type 决定使用哪个 vModel 实现：
 export const vModelDynamic: ObjectDirective<
   HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
 > = {

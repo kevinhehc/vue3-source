@@ -13,7 +13,16 @@ import {
 
 export const xlinkNS = 'http://www.w3.org/1999/xlink'
 
+// 于设置 DOM 属性（attribute） 的函数 patchAttr 的源码实现。它负责在运行时为 HTML 或 SVG 元素正确设置、更新或移除属性，包括：
+// 普通 HTML 属性
+// 带命名空间的 xlink: 属性（SVG 特有）
+// 布尔属性处理
+// Vue 2.x 的兼容行为（例如 draggable="true"）
 export function patchAttr(
+  // key: 属性名
+  // value: 要设置的值
+  // isSVG: 是否是 SVG 元素（决定是否走 setAttributeNS）
+  // isBoolean: 是否是特殊布尔属性（如 checked, selected, disabled）
   el: Element,
   key: string,
   value: any,
