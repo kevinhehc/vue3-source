@@ -86,29 +86,69 @@ import { isAsyncWrapper } from './apiAsyncComponent'
 import { isCompatEnabled } from './compat/compatConfig'
 import { DeprecationTypes } from './compat/compatConfig'
 import type { TransitionHooks } from './components/BaseTransition'
-
+// 表示“宿主环境的元素类型”
+// 浏览器 DOM 中，它是 HTMLElement
+// SSR 中，是虚拟字符串节点
+// 自定义平台可以是任意类型（如 canvas、Weex 元素等）
 export interface Renderer<HostElement = RendererElement> {
+  // 渲染函数，用于挂载组件树：
   render: RootRenderFunction<HostElement>
+  // 创建应用实例的方法：
+  // 用于生成应用实例（App 对象）
+  // 返回对象含 .mount()、.component() 等方法
   createApp: CreateAppFunction<HostElement>
 }
 
+// 用于支持 SSR 客户端水合（hydrate）功能
 export interface HydrationRenderer extends Renderer<Element | ShadowRoot> {
+  // 用于将 SSR 渲染的 HTML 与客户端组件树绑定（进行“激活”）
   hydrate: RootHydrateFunction
 }
 
+// document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+// 为了支持这一点，Vue 在虚拟节点（VNode）或渲染上下文中可能会携带 ns 字段：
+// interface VNode {
+//   ...
+//   ns?: ElementNamespace
+// }
+// Vue 会根据这个 ns 值选择：
+// undefined → 使用 document.createElement()
+// 'svg' → 使用 document.createElementNS(SVG_NS, ...)
+// 'mathml' → 使用 document.createElementNS(MATHML_NS, ...)
+
+// 'svg'：SVG 命名空间
+// 'mathml'：MathML 命名空间
+// undefined：普通 HTML 命名空间（默认）
 export type ElementNamespace = 'svg' | 'mathml' | undefined
 
+//  Vue 渲染器中的根级渲染函数类型，即 render() 函数的签名。
 export type RootRenderFunction<HostElement = RendererElement> = (
+  // 表示要渲染的虚拟节点树（VNode）
+  // 若为 null，表示卸载（unmount）
   vnode: VNode | null,
+  // 渲染的目标容器
+  // 默认为 RendererElement（通常是 DOM Element）
+  // 可自定义为其他宿主元素类型（如 canvas 节点、字符串缓冲区等）
   container: HostElement,
+  // 指定 DOM 命名空间（可选）
+  // 类型为 'svg' | 'mathml' | undefined
+  // 用于 <svg>、<math> 等标签正确渲染子节点
   namespace?: ElementNamespace,
 ) => void
 
+// 定义了一个平台无关（platform-agnostic）渲染 API集合，Vue runtime-core 利用它构建 DOM 渲染器、SSR 渲染器或自定义渲染器。
+// RendererOptions 是 createRenderer() 的参数，用来告诉 Vue：
+// 如何在当前平台上执行基础 DOM 操作，比如创建元素、插入节点、设置属性等。
+// Vue 的渲染器本质就是通过这些“钩子”执行平台相关的实际渲染工作。
 export interface RendererOptions<
   HostNode = RendererNode,
   HostElement = RendererElement,
 > {
   // diffprops的函数
+  // 更新属性、事件、指令等核心逻辑（diff props）
+  // 核心 diff 方法
+  // 处理 class、style、事件（如 onClick）、原生属性（如 value）等更新逻辑
+  // DOM 渲染器中由 patchProp.ts 实现
   patchProp(
     el: HostElement,
     key: string,
@@ -117,35 +157,40 @@ export interface RendererOptions<
     namespace?: ElementNamespace,
     parentComponent?: ComponentInternalInstance | null,
   ): void
-  // 插入方法
+  // 插入方法 插入一个节点到容器中（支持 anchor）
+  // 将节点插入到容器中，支持定位（anchor）
+  // 对应 DOM 中的 parent.insertBefore(el, anchor)
   insert(el: HostNode, parent: HostElement, anchor?: HostNode | null): void
-  // 移除方法
+  // 移除方法 删除一个节点
   remove(el: HostNode): void
-  // 创建元素方法
+  // 创建元素方法 创建元素节点（支持命名空间）
+  // 创建带命名空间和自定义元素支持的元素节点
+  // DOM 平台中会用 document.createElement() 或 createElementNS()
   createElement(
     type: string,
     namespace?: ElementNamespace,
     isCustomizedBuiltIn?: string,
     vnodeProps?: (VNodeProps & { [key: string]: any }) | null,
   ): HostElement
-  // 创建文本方法
+  // 创建文本方法 创建文本节点
   createText(text: string): HostNode
-  // 创建注释方法
+  // 创建注释方法 创建注释节点
   createComment(text: string): HostNode
-  // 设置文本方法
+  // 设置文本方法 设置文本节点内容
   setText(node: HostNode, text: string): void
-  // 设置元素文本内容方法
+  // 设置元素文本内容方法 设置元素的文本内容（innerText）
   setElementText(node: HostElement, text: string): void
-  // 查找父元素的方法
+  // 查找父元素的方法 获取父元素
   parentNode(node: HostNode): HostElement | null
-  // 查找下一个兄弟元素的方法
+  // 查找下一个兄弟元素的方法 获取下一个兄弟节点
   nextSibling(node: HostNode): HostNode | null
-  // 静态选择器
+  // 静态选择器 用于 SSR hydration 的静态查找
   querySelector?(selector: string): HostElement | null
+  // 设置 data-v-scopeId（用于 scoped CSS）
   setScopeId?(el: HostElement, id: string): void
-  // 克隆元素
+  // 克隆元素 克隆 DOM 节点（SSR、静态优化用）
   cloneNode?(node: HostNode): HostNode
-  // 插入静态节点的方法
+  // 插入静态节点的方法 插入静态 HTML 内容的钩子（静态提升优化用）
   insertStaticContent?(
     content: string,
     parent: HostElement,
@@ -160,6 +205,8 @@ export interface RendererOptions<
 // logic - they are never directly operated on and always passed to the node op
 // functions provided via options, so the internal constraint is really just
 // a generic object.
+// 宽泛类型接口，代表“渲染目标平台中的单个节点”，即：
+// 渲染器中可接受的最基础单位节点类型。
 export interface RendererNode {
   [key: string | symbol]: any
 }
@@ -169,10 +216,24 @@ export interface RendererElement extends RendererNode {}
 // An object exposing the internals of a renderer, passed to tree-shakeable
 // features so that they can be decoupled from this file. Keys are shortened
 // to optimize bundle size.
+// Vue 渲染流程的“内部管线控制中心”，封装了渲染器各阶段的行为函数。其主要作用是：
+// 将核心的渲染功能打包成一个内部对象，传递给需要它的模块（如：组件、指令、过渡处理等），
+// 同时避免直接依赖整个渲染器文件，从而实现 tree-shaking + 解耦。
 export interface RendererInternals<
   HostNode = RendererNode,
   HostElement = RendererElement,
 > {
+  // 缩写	真实含义	作用
+  // p	patch	比较并更新 vnode（diff）
+  // um	unmount	卸载 vnode
+  // r	remove	移除真实 DOM 节点
+  // m	move	移动节点位置（transition/group 用）
+  // mt	mountComponent	挂载组件
+  // mc	mountChildren	挂载子节点
+  // pc	patchChildren	diff 子节点列表
+  // pbc	patchBlockChildren	diff block 节点的子节点
+  // n	next	获取下一个 sibling 节点
+  // o	options	RendererOptions，即平台操作 API
   p: PatchFn
   um: UnmountFn
   r: RemoveFn
@@ -183,11 +244,19 @@ export interface RendererInternals<
   pbc: PatchBlockChildrenFn
   n: NextFn
   o: RendererOptions<HostNode, HostElement>
+  // 如何使用它
+  // Vue 的 <Transition> 组件就是通过接收 RendererInternals 来实现通用控制的：
+  // function createBaseTransition(props, children, context, internals: RendererInternals) {
+  //   // 使用 internals.p / internals.m / internals.um 来控制 vnode 生命周期
+  // }
 }
 
 // These functions are created inside a closure and therefore their types cannot
 // be directly exported. In order to avoid maintaining function signatures in
 // two places, we declare them once here and use them inside the closure.
+// 段代码定义了 Vue 渲染器内部一系列核心生命周期操作函数的类型，用于在 renderer 实现中组织功能模块，并作为 RendererInternals 的组成部分。
+
+// 核心 diff 算法，挂载/更新 VNode
 type PatchFn = (
   n1: VNode | null, // null means this is a mount
   n2: VNode,
@@ -200,6 +269,7 @@ type PatchFn = (
   optimized?: boolean,
 ) => void
 
+// 挂载 VNode 的子节点数组
 type MountChildrenFn = (
   children: VNodeArrayChildren,
   container: RendererElement,
@@ -212,6 +282,7 @@ type MountChildrenFn = (
   start?: number,
 ) => void
 
+// diff 普通子节点（非 block）
 type PatchChildrenFn = (
   n1: VNode | null,
   n2: VNode,
@@ -224,6 +295,7 @@ type PatchChildrenFn = (
   optimized: boolean,
 ) => void
 
+// diff block 节点的子节点（优化过）
 type PatchBlockChildrenFn = (
   oldChildren: VNode[],
   newChildren: VNode[],
@@ -234,6 +306,7 @@ type PatchBlockChildrenFn = (
   slotScopeIds: string[] | null,
 ) => void
 
+// 节点位置移动（例如过渡切换）
 type MoveFn = (
   vnode: VNode,
   container: RendererElement,
@@ -242,8 +315,10 @@ type MoveFn = (
   parentSuspense?: SuspenseBoundary | null,
 ) => void
 
+// 获取下一个兄弟节点（用于 anchor 定位）
 type NextFn = (vnode: VNode) => RendererNode | null
 
+// 卸载单个 vnode
 type UnmountFn = (
   vnode: VNode,
   parentComponent: ComponentInternalInstance | null,
@@ -252,8 +327,10 @@ type UnmountFn = (
   optimized?: boolean,
 ) => void
 
+// 从 DOM 中移除节点（低级操作）
 type RemoveFn = (vnode: VNode) => void
 
+// 卸载多个子节点
 type UnmountChildrenFn = (
   children: VNode[],
   parentComponent: ComponentInternalInstance | null,
@@ -263,6 +340,7 @@ type UnmountChildrenFn = (
   start?: number,
 ) => void
 
+// 挂载组件节点
 export type MountComponentFn = (
   initialVNode: VNode,
   container: RendererElement,
@@ -273,6 +351,7 @@ export type MountComponentFn = (
   optimized: boolean,
 ) => void
 
+// 处理文本节点或注释节点的 patch 逻辑
 type ProcessTextOrCommentFn = (
   n1: VNode | null,
   n2: VNode,
@@ -280,6 +359,7 @@ type ProcessTextOrCommentFn = (
   anchor: RendererNode | null,
 ) => void
 
+// 设置组件渲染副作用（用于响应式绑定）
 export type SetupRenderEffectFn = (
   instance: ComponentInternalInstance,
   initialVNode: VNode,
@@ -291,9 +371,9 @@ export type SetupRenderEffectFn = (
 ) => void
 
 export enum MoveType {
-  ENTER,
-  LEAVE,
-  REORDER,
+  ENTER, // 进入动画
+  LEAVE, // 离开动画
+  REORDER, // 子节点顺序调整
 }
 
 export const queuePostRenderEffect: (

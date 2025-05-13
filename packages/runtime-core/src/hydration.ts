@@ -43,8 +43,13 @@ import { isAsyncWrapper } from './apiAsyncComponent'
 import { isReactive } from '@vue/reactivity'
 import { updateHOCHostEl } from './componentRenderUtils'
 
+// 复用现有的 DOM 节点（不重建 DOM）
+// 绑定事件、激活组件（如绑定 onClick 等）
+// 形成响应式更新能力
 export type RootHydrateFunction = (
+  // vnode: 客户端要挂载的组件树（VNode）
   vnode: VNode<Node, Element>,
+  // container: 已被 SSR 渲染好的 DOM 根容器
   container: (Element | ShadowRoot) & { _vnode?: VNode },
 ) => void
 
