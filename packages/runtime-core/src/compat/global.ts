@@ -59,6 +59,20 @@ import {
 } from './compatConfig'
 import type { LegacyPublicInstance } from './instance'
 
+// Vue 2 默认导出的是一个全局构造函数：
+// import Vue from 'vue'
+//
+// new Vue({
+//   el: '#app',
+//   data: { msg: 'hello' }
+// })
+
+// Vue 3 移除了这个默认导出，并改成了函数式 API：
+// import { createApp } from 'vue'
+//
+// createApp({ ... }).mount('#app')
+// 为了让旧代码在 Vue 3 中不经重写即可运行，Vue 提供了 compat build，其中就通过 createCompatVue() 恢复了一个类似 Vue 2 的全局构造器。
+
 /**
  * @deprecated the default `Vue` export has been removed in Vue 3. The type for
  * the default export is provided only for migration purposes. Please use
@@ -140,12 +154,32 @@ export let singletonApp: App
 let singletonCtor: CompatVue
 
 // Legacy global Vue constructor
+// 用于在 Vue 3 中模拟一个兼容 Vue 2 的全局 Vue 构造函数，实现对 Vue 2 风格的语法、生命周期、API 和插件系统的兼容。
+
+//           createCompatVue()
+//                  │
+//         ┌────────┴────────┐
+//         ▼                 ▼
+// 模拟 Vue 构造器       创建 singletonApp (全局 App)
+//         │
+//         ├─ Vue.use()
+//         ├─ Vue.component()
+//         ├─ Vue.extend()
+//         └─ new Vue(...) -> createCompatApp() -> app._createRoot()
+//
+//         ↓
+//
+//       instance._compat_mount() / _compat_destroy()
 export function createCompatVue(
   createApp: CreateAppFunction<Element>,
   createSingletonApp: CreateAppFunction<Element>,
 ): CompatVue {
   singletonApp = createSingletonApp({})
 
+  // 使用 Vue 3 的 createApp() 内部创建应用；
+  // 使用 app._createRoot!() 创建并返回组件实例；
+  // 支持 el 挂载；
+  // 自动包装非函数的 data 选项（Vue 2 允许 data: {}，Vue 3 要求 data: () => ({})）；
   const Vue: CompatVue = (singletonCtor = function Vue(
     options: ComponentOptions = {},
   ) {
@@ -181,6 +215,10 @@ export function createCompatVue(
   Vue.version = `2.6.14-compat:${__VERSION__}`
   Vue.config = singletonApp.config
 
+  // 模拟 Vue 2 的 API：use, mixin, component, directive, filter
+  // 所有这些方法都代理到底层的 singletonApp（一个隐式全局应用）；
+  // 全局注册的组件、指令、过滤器等都注册到这个全局 app 上；
+  // 保持和 Vue 2 使用方式一致。
   Vue.use = (plugin: Plugin, ...options: any[]) => {
     if (plugin && isFunction(plugin.install)) {
       plugin.install(Vue as any, ...options)
@@ -615,6 +653,10 @@ const methodsToPatch = [
 
 const patched = new WeakSet<object>()
 
+// 实现 Vue 2 风格响应式
+// Vue 2 中 Vue.set() 可用于对象的响应式属性添加；
+// 在 compat 中通过 defineReactiveSimple() 加入响应追踪和触发机制；
+// 支持数组方法补丁（如 push, splice）确保变化能被追踪。
 function defineReactive(obj: any, key: string, val: any) {
   // it's possible for the original object to be mutated after being defined
   // and expecting reactivity... we are covering it here because this seems to

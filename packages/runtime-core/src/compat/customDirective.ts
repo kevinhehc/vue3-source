@@ -23,6 +23,16 @@ const legacyDirectiveHookMap: Partial<
   unmounted: 'unbind',
 }
 
+// 用于兼容 Vue 2 自定义指令钩子名称的转换函数：
+
+// 在 Vue 2 中，自定义指令的钩子名称和 Vue 3 是不一样的：
+//
+// Vue 2 钩子	    Vue 3 对应钩子
+// bind	            beforeMount
+// inserted	        mounted
+// update	        beforeUpdate
+// componentUpdated	updated
+// unbind	        unmounted
 export function mapCompatDirectiveHook(
   name: keyof ObjectDirective,
   dir: ObjectDirective & LegacyDirective,

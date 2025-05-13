@@ -10,6 +10,15 @@ import {
 } from '../component'
 import { warn } from '../warning'
 
+// 兼容性配置机制完整实现源码，这是 Vue 3 对 Vue 2 特性支持的一套系统方案，主要服务于 Vue 2 → Vue 3 平滑迁移。
+// Vue 3 中移除了很多 Vue 2 的旧功能（如 $listeners, $set, $destroy, filters 等），
+// 但为了帮助迁移项目，Vue 提供了一个可选的构建：Compat Build，它允许你：
+//
+// 启用/禁用特定兼容特性；
+// 逐个组件或全局配置；
+// 在运行时提供警告（warnDeprecation()）或行为控制。
+
+// 列出了所有被废弃、兼容支持的 Vue 2 功能标识符
 export enum DeprecationTypes {
   GLOBAL_MOUNT = 'GLOBAL_MOUNT',
   GLOBAL_MOUNT_CONTAINER = 'GLOBAL_MOUNT_CONTAINER',
@@ -66,6 +75,10 @@ export enum DeprecationTypes {
   PRIVATE_APIS = 'PRIVATE_APIS',
 }
 
+// 对应每一个 DeprecationTypes，提供：
+// message: 提示信息（字符串或函数）；
+// link: 对应迁移指南链接。
+// 用于开发时提示和日志输出。
 type DeprecationData = {
   message: string | ((...args: any[]) => string)
   link?: string
@@ -435,6 +448,10 @@ export function toggleDeprecationWarning(flag: boolean): void {
   warningEnabled = flag
 }
 
+// 当检测到旧特性被使用时：
+// 发出格式化的警告；
+// 可被设置为“只警告一次”；
+// 可被 suppress-warning 抑制但仍保留功能行为。
 export function warnDeprecation(
   key: DeprecationTypes,
   instance: ComponentInternalInstance | null,
@@ -502,6 +519,7 @@ export const globalCompatConfig: CompatConfig = {
   MODE: 2,
 }
 
+// 用于配置全局兼容行为：
 export function configureCompat(config: CompatConfig): void {
   if (__DEV__) {
     validateCompatConfig(config)
@@ -563,6 +581,12 @@ export function getCompatConfigForKey(
   return globalCompatConfig[key]
 }
 
+// 用于 查询某个兼容项是否启用：
+// instance.type.compatConfig 组件级配置；
+// globalCompatConfig 全局配置；
+// 支持 MODE: 2 | 3 | fn 切换行为：
+// MODE: 2：默认开启所有兼容项；
+// MODE: 3：默认关闭，除非明确设为 true 或 "suppress-warning"。
 export function isCompatEnabled(
   key: DeprecationTypes,
   instance: ComponentInternalInstance | null,
@@ -590,6 +614,7 @@ export function isCompatEnabled(
 /**
  * Use this for features that are completely removed in non-compat build.
  */
+// 用于强制检测某个旧特性是否启用兼容支持，否则抛错。
 export function assertCompatEnabled(
   key: DeprecationTypes,
   instance: ComponentInternalInstance | null,
@@ -622,6 +647,10 @@ export function softAssertCompatEnabled(
  * behavior in 2 vs 3. Only warn if compat is enabled.
  * e.g. render function
  */
+// 用于：
+// 仅做警告：兼容行为不同但不会抛错
+// 提供静默 fallback；
+// Vue 内部大量使用（如指令、渲染函数、生命周期等）。
 export function checkCompatEnabled(
   key: DeprecationTypes,
   instance: ComponentInternalInstance | null,

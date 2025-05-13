@@ -39,9 +39,19 @@ import {
 } from './compatConfig'
 import { compatModelEventPrefix } from './componentVModel'
 
+// 包装 Vue 2 的 render(h) 函数为 Vue 3 能用的形式
 export function convertLegacyRenderFn(
   instance: ComponentInternalInstance,
 ): void {
+  // 识别 Vue 2 的 render 函数格式：
+  // render(h) {
+  //   return h('div', this.msg)
+  // }
+  // 包装为：
+  // Component.render = function compatRender() {
+  //   return render.call(this, compatH)
+  // }
+  // 并设置标记 _compatWrapped = true，避免重复包裹。
   const Component = instance.type as ComponentOptions
   const render = Component.render as InternalRenderFunction | undefined
 
@@ -119,11 +129,23 @@ export function compatH(
   children?: LegacyVNodeChildren,
 ): VNode
 
+// 兼容 Vue 2 的 h() 调用（即 $createElement）
 export function compatH(
   type: any,
   propsOrChildren?: any,
   children?: any,
 ): VNode {
+  // 兼容 Vue 2 的 h(type, props?, children?) 调用方式。
+  //
+  // 转换逻辑：
+  //
+  // 输入类型	                            处理方式
+  // 字符串组件名（如 'div', 'transition'）	转为 resolveDynamicComponent() 形式
+  // 第二参数是 VNode	                        包装为 [vnode]
+  // 有 directives	                        应用 withDirectives()
+  // 有 slot	                            转换为 Vue 3 插槽格式
+  //
+  // 最终调用 createVNode(type, props, children)。
   if (!type) {
     type = Comment
   }
@@ -176,6 +198,13 @@ const skipLegacyRootLevelProps = /*@__PURE__*/ makeMap(
   'staticStyle,staticClass,directives,model,hook',
 )
 
+// 兼容 Vue 2 VNode 的 props 格式
+// 将 Vue 2 的复杂 props 结构转为 Vue 3 的 VNode props：
+// 合并 attrs、domProps、props；
+// 合并 on 和 nativeOn 事件（并处理修饰符前缀，如 ~click, !focus）；
+// 处理 staticClass + class 合并；
+// 处理 model 字段（Vue 2 编译生成的 v-model）；
+// 关键点是支持 Vue 2 的编译结构。
 function convertLegacyProps(
   legacyProps: LegacyVNodeProps | undefined,
   type: any,
@@ -240,10 +269,14 @@ function convertLegacyEventKey(event: string): string {
   return toHandlerKey(event)
 }
 
+// 转换 Vue 2 的 directives 为 Vue 3 的 withDirectives() 调用
 function convertLegacyDirectives(
   vnode: VNode,
   props?: LegacyVNodeProps,
 ): VNode {
+  // 将 Vue 2 的 directives: [...] 数组，转换为：
+  // withDirectives(vnode, [[resolveDirective('name'), value, arg, modifiers]])
+  // 这是 Vue 3 支持的指令方式。
   if (props && props.directives) {
     return withDirectives(
       vnode,
@@ -260,7 +293,13 @@ function convertLegacyDirectives(
   return vnode
 }
 
+// 将 Vue 2 的插槽数组/函数转换为 Vue 3 插槽格式
 function convertLegacySlots(vnode: VNode): VNode {
+  // 将 Vue 2 中的 slot 用法（包括具名插槽、作用域插槽）转换为 Vue 3 格式：
+  // 从 VNode 的 children 中提取 .slot 属性构建 slots；
+  // 如果有 scopedSlots 直接合并；
+  // 每个 slot 变为一个返回 VNode 数组的函数；
+  // 最终调用 normalizeChildren(vnode, slots) 注入到 VNode 中。
   const { props, children } = vnode
 
   let slots: Record<string, any> | undefined
@@ -305,6 +344,7 @@ function convertLegacySlots(vnode: VNode): VNode {
   return vnode
 }
 
+// 给 VNode 添加 Vue 2 风格的属性，例如 vnode.data, vnode.context, vnode.child
 export function defineLegacyVNodeProperties(vnode: VNode): void {
   /* v8 ignore start */
   if (
