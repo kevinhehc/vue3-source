@@ -219,6 +219,7 @@ function doCompileTemplate({
   const shortId = id.replace(/^data-v-/, '')
   const longId = `data-v-${shortId}`
 
+  // 决定用compiler-dom还是用compiler-ssr
   const defaultCompiler = ssr ? (CompilerSSR as TemplateCompiler) : CompilerDOM
   compiler = compiler || defaultCompiler
 
