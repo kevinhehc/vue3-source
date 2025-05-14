@@ -10,6 +10,13 @@ import { camelize, capitalize, isString } from '@vue/shared'
 import { warn } from '../warning'
 import type { VNodeTypes } from '../vnode'
 
+// 统一处理各种资源（assets）的解析流程：
+//
+// ✅ 组件 resolveComponent('MyComp')
+// ✅ 指令 resolveDirective('v-my-dir')
+// ✅ 过滤器（v2 兼容）resolveFilter('capitalize')
+// ✅ 动态组件 <component :is="dynamicComp" />
+
 export const COMPONENTS = 'components'
 export const DIRECTIVES = 'directives'
 export const FILTERS = 'filters'
@@ -19,10 +26,13 @@ export type AssetTypes = typeof COMPONENTS | typeof DIRECTIVES | typeof FILTERS
 /**
  * @private
  */
+// 根据组件名解析本地或全局注册组件。
 export function resolveComponent(
   name: string,
   maybeSelfReference?: boolean,
 ): ConcreteComponent | string {
+  // 成功：返回组件定义；
+  // 失败：返回原始字符串名（用于警告提示等）。
   return resolveAsset(COMPONENTS, name, true, maybeSelfReference) || name
 }
 
@@ -31,7 +41,13 @@ export const NULL_DYNAMIC_COMPONENT: unique symbol = Symbol.for('v-ndc')
 /**
  * @private
  */
+// 用于 <component :is="..."> 动态组件语法。
 export function resolveDynamicComponent(component: unknown): VNodeTypes {
+  // 如果 component 是字符串 → 去注册表查找；
+  //
+  // 如果不是字符串（是组件定义、异步组件、null 等）：
+  // 直接返回（交给 createVNode() 后续处理）；
+  // 若为 falsy，则返回 NULL_DYNAMIC_COMPONENT 占位符（用于触发警告等处理）。
   if (isString(component)) {
     return resolveAsset(COMPONENTS, component, false) || component
   } else {
@@ -43,6 +59,7 @@ export function resolveDynamicComponent(component: unknown): VNodeTypes {
 /**
  * @private
  */
+// 用于解析指令名，实际就是 resolveAsset(DIRECTIVES, name)。
 export function resolveDirective(name: string): Directive | undefined {
   return resolveAsset(DIRECTIVES, name)
 }
@@ -59,6 +76,7 @@ export function resolveFilter(name: string): Function | undefined {
  * @private
  * overload 1: components
  */
+// 资源解析的核心逻辑，统一处理组件、指令、过滤器。
 function resolveAsset(
   type: typeof COMPONENTS,
   name: string,
@@ -74,6 +92,10 @@ function resolveAsset(
 // overload 3: filters (compat only)
 function resolveAsset(type: typeof FILTERS, name: string): Function | undefined
 // implementation
+// 1. 局部注册（options API: instance.components / directives / filters）
+// 2. 组件定义上的静态注册（setup-less options）
+// 3. 应用上下文 appContext 注册的全局组件 / 指令
+// 4. maybeSelfReference: 回退到组件自身（self-reference）
 function resolveAsset(
   type: AssetTypes,
   name: string,

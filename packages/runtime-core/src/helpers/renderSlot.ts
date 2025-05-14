@@ -22,6 +22,11 @@ import { isAsyncWrapper } from '../apiAsyncComponent'
  * Compiler runtime helper for rendering `<slot/>`
  * @private
  */
+// 用于渲染具名插槽、动态插槽或默认插槽的内容，同时处理 fallback 内容、作用域插槽、Custom Element 模式、SSR 等细节。
+// 示例（编译产物）
+// <slot name="foo" :msg="bar">fallback</slot>
+// 编译生成：
+// renderSlot(slots, 'foo', { msg: bar }, () => [h('div', 'fallback')])
 export function renderSlot(
   slots: Slots,
   name: string,
@@ -31,12 +36,17 @@ export function renderSlot(
   fallback?: () => VNodeArrayChildren,
   noSlotted?: boolean,
 ): VNode {
+  // 1. Custom Element 模式兼容
   if (
     currentRenderingInstance!.ce ||
     (currentRenderingInstance!.parent &&
       isAsyncWrapper(currentRenderingInstance!.parent) &&
       currentRenderingInstance!.parent.ce)
   ) {
+    // 如果当前组件或父组件是通过 defineCustomElement() 定义的（即 Web Components）；
+    // 则插槽不执行 slot(props) 函数，而是直接渲染 DOM 的 <slot name="..."> 元素；
+    // 返回的是一个 Fragment 包裹的 vnode：
+
     // in custom element mode, render <slot/> as actual slot outlets
     // wrap it with a fragment because in shadowRoot: false mode the slot
     // element gets replaced by injected content
@@ -53,9 +63,16 @@ export function renderSlot(
   }
 
   // 取出相应的插槽渲染函数
+  // 2. 查找插槽渲染函数
+  // slots 是运行时插槽对象；
+  // slot 是一个函数，执行时传入作用域插槽绑定的 props；
+  // 例如 <slot :foo="bar" /> → slot({ foo: bar })。
   let slot = slots[name]
 
+  // 3. 兼容 SSR 非优化 slot 函数报错
   if (__DEV__ && slot && slot.length > 1) {
+    // 若检测到 SSR 优化插槽误用（比如未配置 $dynamic-slots），发出警告；
+    // 回退为空。
     warn(
       `SSR-optimized slot function detected in a non-SSR-optimized render ` +
         `function. You need to mark this component with $dynamic-slots in the ` +
@@ -68,17 +85,35 @@ export function renderSlot(
   // invocation interfering with template-based block tracking, but in
   // `renderSlot` we can be sure that it's template-based so we can force
   // enable it.
+  // 4. 启用 block tracking
+  // _c：是否为编译生成的 slot（compiled）；
+  // _d：禁用 block tracking（diff 用）；
+  // 在 renderSlot 中强制允许追踪。
   if (slot && (slot as ContextualRenderFn)._c) {
     ;(slot as ContextualRenderFn)._d = false
   }
   openBlock()
+  // 5. 执行插槽函数，拿到 vnode children
+  // 插槽函数执行后可能返回：
+  // VNode 数组（标准情况）
+  // 空数组或注释节点（视为无内容）
+  // ensureValidVNode() 作用：
+  // 递归判断 vnode 数组中是否含有效内容（非纯注释）；
+  // 否则为 null，触发 fallback。
   const validSlotContent = slot && ensureValidVNode(slot(props))
+
+  // 6. 构造 key 与内容 fallback 判断
+  // 如果用户绑定了 key 或 createSlots() 中设置了 key（v-if 插槽），则使用；
+  // 否则 fallback 分支拼接 _fb 后缀用于 diff 识别不同内容。
   const slotKey =
     props.key ||
     // slot content array of a dynamic conditional slot may have a branch
     // key attached in the `createSlots` helper, respect that
     (validSlotContent && (validSlotContent as any).key)
 
+  // 7. 返回插槽渲染 vnode：Fragment
+  // 插槽内容用一个 Fragment 包裹；
+  // PatchFlags 视插槽是否稳定决定是 STABLE_FRAGMENT 还是 BAIL。
   const rendered = createBlock(
     // 创建一个fragment
     Fragment,
@@ -95,15 +130,26 @@ export function renderSlot(
       ? PatchFlags.STABLE_FRAGMENT
       : PatchFlags.BAIL,
   )
+
+  // 8. 处理 slotScopeIds（CSS scope 插槽）
+  // 支持 CSS Scoped 插槽样式隔离；
+  // 给 vnode 添加插槽作用域 ID。
   if (!noSlotted && rendered.scopeId) {
     rendered.slotScopeIds = [rendered.scopeId + '-s']
   }
+
+  // 9. 恢复 block tracking 状态
+  // 恢复 _d，避免外部乱用插槽函数干扰 block 结构。
   if (slot && (slot as ContextualRenderFn)._c) {
     ;(slot as ContextualRenderFn)._d = true
   }
   return rendered
 }
 
+// 递归判断插槽是否含有：
+// 非注释节点
+// 或 Fragment 中嵌套了有效节点
+// 若全为注释（如 <template #foo v-if="false">），视为无内容 → fallback。
 export function ensureValidVNode(
   vnodes: VNodeArrayChildren,
 ): VNodeArrayChildren | null {
