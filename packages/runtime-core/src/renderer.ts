@@ -764,31 +764,62 @@ function baseCreateRenderer(
     }
   }
 
+  // 用于移动静态节点的 DOM 内容到新的位置，一般发生在如下场景：
+  // Keyed Fragment 中静态 vnode 的位置发生变化；
+  // TransitionGroup 动画过程中节点排序变化；
+  // 模板中的静态内容需要整体移动
   const moveStaticNode = (
-    { el, anchor }: VNode,
-    container: RendererElement,
-    nextSibling: RendererNode | null,
+    { el, anchor }: VNode, // 当前静态 vnode 的起始和结束 DOM 节点
+    container: RendererElement, // 目标父容器
+    nextSibling: RendererNode | null, // 要插入的目标位置锚点
   ) => {
+    // el: 静态 vnode 渲染后在 DOM 中的起始节点。
+    // anchor: 静态 vnode 的结束节点，即 vnode 的最后一个 DOM 元素。
+    // 静态 vnode 可能是一组连续节点（如一段 HTML 结构），不是单个节点。
     let next
+    //  遍历并移动从 el 到 anchor 的所有节点
     while (el && el !== anchor) {
+      // 从起始节点 el 开始，直到遇到 anchor 为止：
+      // 使用 hostNextSibling(el) 获取下一个兄弟节点；
+      // 使用 hostInsert(el, container, nextSibling) 插入到目标位置；
+      // 继续处理下一个节点。
+      // 这个过程等价于把 DOM 中连续的一段节点剪切并粘贴到新位置。
       next = hostNextSibling(el)
       hostInsert(el, container, nextSibling)
       el = next
     }
+    // 循环最后没有处理 anchor 本身，因此单独插入一次。
     hostInsert(anchor!, container, nextSibling)
   }
 
+  // 从 DOM 中移除一段静态 VNode 对应的连续节点（即从 el 到 anchor）。
+  // el 是这段静态内容的第一个真实 DOM 节点；
+  // anchor 是这段静态内容的最后一个 DOM 节点。
   const removeStaticNode = ({ el, anchor }: VNode) => {
     let next
     while (el && el !== anchor) {
-      next = hostNextSibling(el)
-      hostRemove(el)
-      el = next
+      next = hostNextSibling(el) // 缓存下一个兄弟节点
+      hostRemove(el) // 从 DOM 中移除当前节点
+      el = next // 移动到下一个节点
     }
+    // 从 el 开始，一直删除到 anchor 之前的所有节点。
+    // hostNextSibling(el) 是宿主平台提供的 API（例如 el.nextSibling）。
+    // 最后移除 anchor 节点本身
     hostRemove(anchor!)
   }
 
+  // 处理 普通元素节点（Element VNode） 的函数 processElement，它是 patch() 主流程中负责挂载或更新 HTML 元素的分支处理函数。
+  // 它同时处理初次挂载和更新两个阶段。
   const processElement = (
+    //   n1,                // 旧 vnode（为 null 表示首次挂载）
+    //   n2,                // 新 vnode
+    //   container,         // 父 DOM 容器
+    //   anchor,            // 插入的锚点位置
+    //   parentComponent,   // 所属的父组件实例
+    //   parentSuspense,    // 所属的 Suspense 边界
+    //   namespace,         // 当前命名空间（如 SVG、MathML）
+    //   slotScopeIds,      // 当前 slot 的作用域 ID（用于 SSR）
+    //   optimized          // 是否开启了编译器优化模式（带 patchFlags）
     n1: VNode | null,
     n2: VNode,
     container: RendererElement,
@@ -799,6 +830,9 @@ function baseCreateRenderer(
     slotScopeIds: string[] | null,
     optimized: boolean,
   ) => {
+    // 命名空间处理（SVG / MathML）
+    // 用于处理 <svg> 或 <math> 元素，它们的 DOM 操作需要特殊命名空间。
+    // 会递归传递下去，确保子节点继承正确的 namespace。
     if (n2.type === 'svg') {
       namespace = 'svg'
     } else if (n2.type === 'math') {
@@ -806,7 +840,12 @@ function baseCreateRenderer(
     }
 
     if (n1 == null) {
-      // 挂载元素
+      // 挂载元素 （首次渲染）
+      // 调用 mountElement() 执行：
+      // 创建元素节点；
+      // 设置属性和事件；
+      // 处理 children；
+      // 插入到 DOM 中。
       mountElement(
         n2,
         container,
@@ -818,7 +857,13 @@ function baseCreateRenderer(
         optimized,
       )
     } else {
-      // 更新元素
+      // 更新元素 （diff 阶段）
+      // 旧 vnode 存在，表示组件正在更新；
+      // 调用 patchElement() 执行：
+      // 判断是否是相同的 DOM 类型；
+      // 使用 patchProps() 比较和更新属性、事件等；
+      // 调用 patchChildren() 更新子节点；
+      // 可能触发 transition、ref、指令钩子等副作用。
       patchElement(
         n1,
         n2,
@@ -831,6 +876,7 @@ function baseCreateRenderer(
     }
   }
 
+  // 用于将一个普通 HTML 元素类型的虚拟节点（VNode）挂载为真实 DOM 元素。
   const mountElement = (
     vnode: VNode,
     container: RendererElement,
@@ -846,16 +892,22 @@ function baseCreateRenderer(
     const { props, shapeFlag, transition, dirs } = vnode
 
     // 创建div元素
+    // 1. 创建 DOM 元素节点
     el = vnode.el = hostCreateElement(
       vnode.type as string,
       namespace,
-      props && props.is,
+      props && props.is, // 支持 is="custom-element"
       props,
     )
 
     // mount children first, since some props may rely on child content
     // being already rendered, e.g. `<select value>`
     // 文本节点的children
+    // 2. 渲染子节点（children）
+    // Vue 会根据 shapeFlag 决定是文本还是数组型 children：
+    // 文本：直接设置 .textContent；
+    // 数组：递归挂载子节点。
+    // 注意必须先挂载子节点，因为有些属性（如 <select :value="...">）依赖其内部 <option> 已存在。
     if (shapeFlag & ShapeFlags.TEXT_CHILDREN) {
       hostSetElementText(el, vnode.children as string)
     } else if (shapeFlag & ShapeFlags.ARRAY_CHILDREN) {
@@ -872,16 +924,27 @@ function baseCreateRenderer(
       )
     }
 
+    // 3. 指令钩子：created
+    // 在有指令（v-model, v-show, 自定义指令）时触发 created 生命周期钩子。
     if (dirs) {
       // invokeDirectiveHook
       invokeDirectiveHook(vnode, null, parentComponent, 'created')
     }
+
+    // 4. 设置作用域 ID（CSS scope）
     // scopeId
+    // 用于 <style scoped> 或 SSR 下的 scopeId 标记。
+    // 会设置 el.setAttribute('data-v-xxxx') 以支持 CSS 隔离。
     setScopeId(el, vnode, vnode.scopeId, slotScopeIds, parentComponent)
-    // props
-    // 设置props
+
+    // 设置属性（props）
+    // 遍历 props，调用 hostPatchProp() 设置属性、class、style、事件等；
+    // 排除 value 和保留属性（如 key, ref, onVnodeXXX）。
     if (props) {
       for (const key in props) {
+        // 特殊处理 value：
+        // 避免设置顺序错误，比如 <input :min="5" :value="3">；
+        // 保证强制更新 value，不依赖默认行为。
         if (key !== 'value' && !isReservedProp(key)) {
           hostPatchProp(el, key, null, props[key], namespace, parentComponent)
         }
@@ -898,28 +961,45 @@ function baseCreateRenderer(
       if ('value' in props) {
         hostPatchProp(el, 'value', null, props.value, namespace)
       }
+      // 6. VNode 钩子：onVnodeBeforeMount
+      // 允许用户在 VNode 渲染前执行逻辑，类似生命周期钩子；
+      // 常用于 HOC、自定义渲染控制等。
       if ((vnodeHook = props.onVnodeBeforeMount)) {
         invokeVNodeHook(vnodeHook, parentComponent, vnode)
       }
     }
 
+    // 7. devtools 支持
+    // 给 DOM 节点打上调试标记；
+    // DevTools 通过这些字段追踪 vnode 和组件关系。
     if (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
       def(el, '__vnode', vnode, true)
       def(el, '__vueParentComponent', parentComponent, true)
     }
 
+    // 8. 指令钩子：beforeMount
     if (dirs) {
       // invokeDirectiveHook
       invokeDirectiveHook(vnode, null, parentComponent, 'beforeMount')
     }
     // #1583 For inside suspense + suspense not resolved case, enter hook should call when suspense resolved
     // #1689 For inside suspense + suspense resolved case, just call it
+    // 9. 过渡动画（transition）
+    // 在支持过渡的情况下调用 beforeEnter；
+    // 通常用于 v-enter-from, v-enter-active 设置初始样式。
     const needCallTransitionHooks = needTransition(parentSuspense, transition)
     if (needCallTransitionHooks) {
       transition!.beforeEnter(el)
     }
-    // 插入到容器元素中
+
+    // 10. 插入 DOM
+    // 将 DOM 元素插入父容器中；
+    // 使用 insertBefore 模式支持 anchor 定位。
     hostInsert(el, container, anchor)
+
+    // 11. 渲染后副作用队列（生命周期、指令、过渡）
+    // 挂载完成后将 onVnodeMounted、指令的 mounted、过渡 enter 动画等统一推迟执行；
+    // 利用 scheduler 确保执行时机在 DOM 全部挂载完成之后。
     if (
       (vnodeHook = props && props.onVnodeMounted) ||
       needCallTransitionHooks ||
@@ -934,22 +1014,47 @@ function baseCreateRenderer(
     }
   }
 
+  // 用于设置 CSS 作用域 ID（scope ID） 的关键逻辑之一。
+  // 在渲染 DOM 元素时，将组件、插槽的作用域 ID 正确地设置到真实 DOM 元素上，确保作用域样式生效。
   const setScopeId = (
+    //   el,              // 当前要设置属性的 DOM 元素
+    //   vnode,           // 当前 vnode
+    //   scopeId,         // 当前组件的 scopeId（如 data-v-123abc）
+    //   slotScopeIds,    // 当前 vnode 渲染时作用域插槽的 scopeIds
+    //   parentComponent  // 父组件实例（用于递归处理根节点）
     el: RendererElement,
     vnode: VNode,
     scopeId: string | null,
     slotScopeIds: string[] | null,
     parentComponent: ComponentInternalInstance | null,
   ) => {
+    // 1. 设置当前 vnode 的作用域 ID
     if (scopeId) {
+      // 会调用平台提供的 hostSetScopeId()（DOM 中为 el.setAttribute(scopeId, '')）；
+      // 通常作用于组件自身模板中的节点。
       hostSetScopeId(el, scopeId)
     }
+
+    // 2. 设置作用域插槽的 ID（来自父组件）
     if (slotScopeIds) {
+      // Vue 的插槽内容可以被嵌套渲染在多个组件中；
+      // 如果父组件使用了 <style scoped>，那么插槽中的 DOM 也需要带上父组件的 scope ID；
+      // slotScopeIds 就是这类来自父组件的作用域 ID。
       for (let i = 0; i < slotScopeIds.length; i++) {
         hostSetScopeId(el, slotScopeIds[i])
       }
     }
+
+    // 3. 递归处理组件根 vnode 的作用域继承
+    // 如果当前 vnode 是其父组件的“根节点”，则还需要继承父组件的作用域 ID。
     if (parentComponent) {
+      // 为什么需要：
+      // 因为作用域样式是从父组件向下传递的，但只会加在根节点；
+      // Vue 会在子组件根 vnode 渲染时递归地向上查找，并将 scopeId 应用于根节点。
+      //
+      // 处理 Fragment 根（开发模式下）：
+      // 如果父组件是 Fragment 类型的根节点（如带注释的模板），会尝试提取真正的单个根；
+      // 使用 filterSingleRoot() 函数提取子树的“实际根”。
       let subTree = parentComponent.subTree
       if (
         __DEV__ &&
@@ -976,7 +1081,22 @@ function baseCreateRenderer(
     }
   }
 
+  // 用于挂载 VNode 的数组子节点的核心函数
+  // 通常出现在如下情况：
+  // <div><span>1</span><span>2</span></div>，即一个元素拥有多个子元素；
+  // 渲染 v-for；
+  // 渲染 <slot> 内容时传入多个子 vnode；
+  // 或任何 children 是 VNode[] 的情况。
   const mountChildren: MountChildrenFn = (
+    //  children,          // VNode 子节点数组
+    //   container,         // DOM 容器
+    //   anchor,            // 插入锚点
+    //   parentComponent,   // 当前组件实例
+    //   parentSuspense,    // 所属 suspense 边界
+    //   namespace,         // HTML / SVG / MathML
+    //   slotScopeIds,      // slot 的 scope ID（支持 scoped slot）
+    //   optimized,         // 是否开启编译器优化（带 patchFlags）
+    //   start = 0          // 可选：从第几个节点开始挂载（默认从头）
     children,
     container,
     anchor,
@@ -987,10 +1107,20 @@ function baseCreateRenderer(
     optimized,
     start = 0,
   ) => {
+    // 从指定下标 start 开始遍历所有子节点，支持偏移量挂载。
     for (let i = start; i < children.length; i++) {
+      // 每个 child 的处理逻辑：
+      // 这里有个关键的区别：根据是否开启 优化模式（编译器生成 patchFlags）处理方式不同：
+      // optimized = true：
+      // 表示渲染函数是由模板编译器生成，具备结构可靠性；
+      // 所以不需要规范化 vnode，只需要判断：如果子 vnode 是已挂载的，要先 clone 一份再挂载（避免副作用）。
       const child = (children[i] = optimized
         ? cloneIfMounted(children[i] as VNode)
         : normalizeVNode(children[i]))
+
+      // patch(null, ...) 表示 这是首次挂载（没有旧 vnode）；
+      // 会触发 processElement、processComponent、processText 等等；
+      // 实际的 vnode 渲染就在这里展开。
       patch(
         null,
         child,
@@ -1005,6 +1135,8 @@ function baseCreateRenderer(
     }
   }
 
+  // 组件更新流程里用于 更新普通 DOM 元素节点（element vnode） 的核心逻辑。
+  // 用于比较两个 vnode 的差异（n1 是旧 vnode，n2 是新 vnode），然后将变化同步到真实 DOM 元素（el）上。
   const patchElement = (
     n1: VNode,
     n2: VNode,
@@ -1015,29 +1147,57 @@ function baseCreateRenderer(
     optimized: boolean,
   ) => {
     // 基本信息
+    // 1. 继承旧 vnode 的 DOM 引用
+    // 新 vnode 需要拿到旧 vnode 的真实 DOM 节点；
+    // 所以把旧的 el 赋值给新的 n2.el；
+    // Vue patch 是 “就地复用 DOM” 的设计。
     const el = (n2.el = n1.el!)
+
+    // 2. devtools vnode 追踪
+    // 在 devtools 或调试模式下，把 vnode 挂到 DOM 元素上，方便调试。
     if (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
       el.__vnode = n2
     }
+
+    // 3. 拿出 patchFlag、dynamicChildren、dirs
+    // patchFlag: 编译器生成的优化标志，用来跳过不必要的 diff；
+    // dynamicChildren: 当前 vnode 中的动态子节点（Block 模式）；
+    // dirs: 指令数组，如 v-model, v-show 等。
     let { patchFlag, dynamicChildren, dirs } = n2
+
     // #1426 take the old vnode's patch flag into account since user may clone a
     // compiler-generated vnode, which de-opts to FULL_PROPS
+    // 4. 兼容 cloneVNode：确保 FULL_PROPS 情况被考虑进来
+    // 如果用户 cloneVNode(n1)，会丢失部分编译时信息；
+    // 此处确保 FULL_PROPS 不被丢掉；
+    // |= 表示将其并入当前 patchFlag。
     patchFlag |= n1.patchFlag & PatchFlags.FULL_PROPS
+
+    // 5. 获取旧/新 props
     const oldProps = n1.props || EMPTY_OBJ
     const newProps = n2.props || EMPTY_OBJ
     let vnodeHook: VNodeHook | undefined | null
 
     // disable recurse in beforeUpdate hooks
+    // 6. beforeUpdate 生命周期钩子处理
+    // 禁止递归（防止 setup 时访问自己）
     parentComponent && toggleRecurse(parentComponent, false)
     if ((vnodeHook = newProps.onVnodeBeforeUpdate)) {
+      // 调用 onVnodeBeforeUpdate
       invokeVNodeHook(vnodeHook, parentComponent, n2, n1)
     }
+
+    // 调用指令的 beforeUpdate
     if (dirs) {
       // invokeDirectiveHook
       invokeDirectiveHook(n2, n1, parentComponent, 'beforeUpdate')
     }
+    // 恢复递归权限
     parentComponent && toggleRecurse(parentComponent, true)
 
+    // 7. 开发环境热更新兼容
+    // 强制禁用优化，走完整 diff 流程；
+    // 保证 HMR 能准确更新 DOM。
     if (__DEV__ && isHmrUpdating) {
       // HMR updated, force full diff
       patchFlag = 0
@@ -1047,6 +1207,11 @@ function baseCreateRenderer(
 
     // #9135 innerHTML / textContent unset needs to happen before possible
     // new children mount
+    // 8. 清空 innerHTML / textContent（非常重要）
+    // 重点：处理 innerHTML/textContent 的“撤销”行为
+    // 例如：
+    // <div :innerHTML="htmlStr"></div>
+    // 如果 htmlStr 原来有内容，后来设为 null，则需要清空 DOM。Vue 会提前处理这一步，避免内容残留。
     if (
       (oldProps.innerHTML && newProps.innerHTML == null) ||
       (oldProps.textContent && newProps.textContent == null)
@@ -1054,7 +1219,11 @@ function baseCreateRenderer(
       hostSetElementText(el, '')
     }
 
+    // 1. diff children
+    // ✔ 优化路径：有 dynamicChildren（Block 模式）
     if (dynamicChildren) {
+      // dynamicChildren 是编译器生成的 当前 block 中有 patchFlag 的子节点数组；
+      // Vue 会跳过未变的 static vnode，只遍历需要更新的子节点，提升性能；
       patchBlockChildren(
         n1.dynamicChildren!,
         dynamicChildren,
@@ -1066,10 +1235,14 @@ function baseCreateRenderer(
       )
       if (__DEV__) {
         // necessary for HMR
+        // traverseStaticChildren 仅在开发环境用于 HMR 时补充 static vnode 的 DOM el 引用。
         traverseStaticChildren(n1, n2)
       }
     } else if (!optimized) {
-      // full diff
+      // optimized = false 表示非编译产物（如手写 render 函数）；
+      // 或者是某些动态结构；
+      // 会完整比较 n1.children 和 n2.children。
+      // full diff 非优化路径：需要完整 diff
       patchChildren(
         n1,
         n2,
@@ -1083,31 +1256,43 @@ function baseCreateRenderer(
       )
     }
 
+    // 2. diff props（使用 patchFlag 决定路径） 走 fast-path 分支
     if (patchFlag > 0) {
       // the presence of a patchFlag means this element's render code was
       // generated by the compiler and can take the fast path.
       // in this path old node and new node are guaranteed to have the same shape
       // (i.e. at the exact same position in the source template)
+      // 1. FULL_PROPS: 动态 key，必须全量对比
       if (patchFlag & PatchFlags.FULL_PROPS) {
         // element props contain dynamic keys, full diff needed
         // 更新props
+        // 例子：v-bind="someObject" 中的动态键名
+        // 因为旧 key 有可能不存在于新对象中，所以必须全量比对 + 清理旧值。
         patchProps(el, oldProps, newProps, parentComponent, namespace)
       } else {
         // class
         // this flag is matched when the element has dynamic class bindings.
+        // 2. CLASS
+        // 针对 :class 动态绑定；
+        // 仅当 class 值发生变化时才 patch。
         if (patchFlag & PatchFlags.CLASS) {
           if (oldProps.class !== newProps.class) {
             hostPatchProp(el, 'class', null, newProps.class, namespace)
           }
         }
 
-        // style
+        // 3. STYLE
+        // 针对 :style 动态绑定；
+        // 支持 object 和 string 两种写法。
         // this flag is matched when the element has dynamic style bindings
         if (patchFlag & PatchFlags.STYLE) {
           hostPatchProp(el, 'style', oldProps.style, newProps.style, namespace)
         }
 
-        // props
+        // 4. PROPS
+        // 优化路径下，dynamicProps 是一个已知变化的 prop key 列表；
+        // 逐一对比更新；
+        // 特殊处理 value：哪怕值没变也强制 patch（防止 DOM 没变但影响逻辑）。
         // This flag is matched when the element has dynamic prop/attr bindings
         // other than class and style. The keys of dynamic prop/attrs are saved for
         // faster iteration.
@@ -1128,7 +1313,9 @@ function baseCreateRenderer(
         }
       }
 
-      // text
+      // 5. TEXT
+      // 当 vnode 的 children 是文本节点且动态变化；
+      // Vue 会只 patch .textContent，跳过 children diff，极快。
       // This flag is matched when the element has only dynamic text children.
       if (patchFlag & PatchFlags.TEXT) {
         if (n1.children !== n2.children) {
@@ -1136,10 +1323,17 @@ function baseCreateRenderer(
         }
       }
     } else if (!optimized && dynamicChildren == null) {
+      // fallback 分支：未优化、无 patchFlag、无 dynamicChildren
       // unoptimized, full diff
+      // 最保守的情况：手写 render、动态结构等；
+      // 走完整属性比对。
       patchProps(el, oldProps, newProps, parentComponent, namespace)
     }
 
+    // 生命周期钩子和指令钩子
+    // 如果 vnode 上有 onVnodeUpdated 钩子，或者含有指令（如 v-model, v-show）：
+    // 延迟到 patch 完成后统一触发；
+    // 使用 queuePostRenderEffect 确保执行顺序。
     if ((vnodeHook = newProps.onVnodeUpdated) || dirs) {
       queuePostRenderEffect(() => {
         vnodeHook && invokeVNodeHook(vnodeHook, parentComponent, n2, n1)
@@ -2546,9 +2740,23 @@ function baseCreateRenderer(
     }
   }
 
+  // 用于从 DOM 中移除一整个 Fragment 的真实节点区域。
+  // 从 cur 到 end（含），把这段 DOM 节点全部移除。
   const removeFragment = (cur: RendererNode, end: RendererNode) => {
+    // cur：起始节点；
+    // end：结束节点；
+    // 通常这两个节点来自 fragment vnode 的 el 和 anchor。
     // For fragments, directly remove all contained DOM nodes.
     // (fragment child nodes cannot have transition)
+
+    // 核心逻辑：
+    // 从 cur 开始，一直向后查找；
+    // 使用 hostNextSibling(cur) 找到下一个兄弟节点；
+    // 调用 hostRemove(cur) 从 DOM 中删除当前节点；
+    // 重复直到遇到 end；
+    // 最后把 end 节点也删掉。
+    // 为什么 cur !== end，然后最后再删 end？
+    // 因为 end 是循环的终止条件，所以它必须最后再删。
     let next
     while (cur !== end) {
       next = hostNextSibling(cur)!
@@ -2558,24 +2766,41 @@ function baseCreateRenderer(
     hostRemove(end)
   }
 
+  // 这个函数是卸载组件实例的核心逻辑，包含生命周期、资源清理、过渡管理、Suspense 支持、DevTools hook 等。
+  // 安全地卸载组件，并清理它关联的副作用、子树、transition、ref、指令、Devtools hook 等。
   const unmountComponent = (
-    instance: ComponentInternalInstance,
-    parentSuspense: SuspenseBoundary | null,
-    doRemove?: boolean,
+    instance: ComponentInternalInstance, // 当前组件实例
+    parentSuspense: SuspenseBoundary | null, // 所在的 Suspense 边界
+    doRemove?: boolean, // 是否同时移除 DOM
   ) => {
+    // 1. 热更新支持：HMR 卸载
+    // 在开发环境，如果组件开启了 HMR（热模块替换），需要注销它。
     if (__DEV__ && instance.type.__hmrId) {
       unregisterHMR(instance)
     }
 
+    // 2. 拿出常用字段
+    // bum: beforeUnmount 钩子数组；
+    // scope: 响应式作用域（effectScope）；
+    // job: 渲染 effect（用于调度更新）；
+    // subTree: 渲染出来的 VNode 子树；
+    // um: unmounted 钩子；
+    // m/a: mounted / activated 钩子，需标记为失效。
     const { bum, scope, job, subTree, um, m, a } = instance
+
+    // 3. 标记挂载生命周期失效（用于 transition）
+    // 将这些钩子的 scheduler job 标记为 DISPOSED，防止意外调用。
     invalidateMount(m)
     invalidateMount(a)
 
     // beforeUnmount hook
+    // 4. 调用 beforeUnmount 生命周期钩子
+    // 调用组件选项或组合式 API 中的 onBeforeUnmount() 注册的逻辑。
     if (bum) {
       invokeArrayFns(bum)
     }
 
+    // 5. 兼容 Vue 2：beforeDestroy
     if (
       __COMPAT__ &&
       isCompatEnabled(DeprecationTypes.INSTANCE_EVENT_HOOKS, instance)
@@ -2584,19 +2809,28 @@ function baseCreateRenderer(
     }
 
     // stop effects in component scope
+    // 6. 停止响应式作用域：清除所有副作用（watchers、computed、render effect）
+    // 所有关联的响应式副作用都在这里停止。
     scope.stop()
 
     // job may be null if a component is unmounted before its async
     // setup has resolved.
+    // 7. 调度器中标记 render job 为已失效
+    // 子树（组件渲染出来的 vnode）也要递归卸载；
+    // 这会走普通 vnode 的 unmount()，可能继续递归处理 DOM 元素、Teleport、Fragment 等。
     if (job) {
       // so that scheduler will no longer invoke it
       job.flags! |= SchedulerJobFlags.DISPOSED
       unmount(subTree, instance, parentSuspense, doRemove)
     }
     // unmounted hook
+    // 8. 注册 unmounted 生命周期钩子（推迟执行）
+    // onUnmounted() 或 unmounted() 钩子将在 patch 完成后调用。
     if (um) {
       queuePostRenderEffect(um, parentSuspense)
     }
+
+    // 9. 兼容 Vue 2：destroyed
     if (
       __COMPAT__ &&
       isCompatEnabled(DeprecationTypes.INSTANCE_EVENT_HOOKS, instance)
@@ -2606,6 +2840,10 @@ function baseCreateRenderer(
         parentSuspense,
       )
     }
+
+    // 10. 标记组件已卸载
+    // 用于后续逻辑判断组件状态；
+    // ref、Devtools、transition 会判断它是否被卸载。
     queuePostRenderEffect(() => {
       instance.isUnmounted = true
     }, parentSuspense)
@@ -2613,6 +2851,12 @@ function baseCreateRenderer(
     // A component with async dep inside a pending suspense is unmounted before
     // its async dep resolves. This should remove the dep from the suspense, and
     // cause the suspense to resolve immediately if that was the last dep.
+    // 11. 如果组件处于 Suspense 中，且尚未解析完成，需要手动从父 suspense 的 dep 中移除
+    // 这种情况发生在：
+    // <Suspense> 内部挂载了异步组件；
+    // 还没加载完成，用户就提前卸载；
+    // Vue 会移除这个异步依赖，避免 Suspense 卡死；
+    // 如果这是最后一个 dep，还会触发 suspense 的解析。
     if (
       __FEATURE_SUSPENSE__ &&
       parentSuspense &&
@@ -2628,49 +2872,75 @@ function baseCreateRenderer(
       }
     }
 
+    // 12. Devtools 支持：通知组件被移除
     if (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
       devtoolsComponentRemoved(instance)
     }
   }
 
+  // 递归卸载一组子 VNode（通常是数组 children）
   const unmountChildren: UnmountChildrenFn = (
-    children,
-    parentComponent,
-    parentSuspense,
-    doRemove = false,
-    optimized = false,
-    start = 0,
+    children, // VNode[]
+    parentComponent, // 父组件实例（用于触发生命周期等）
+    parentSuspense, // 父 suspense 边界
+    doRemove = false, // 是否执行真实 DOM remove（false 表示仅卸载逻辑）
+    optimized = false, // 是否来自编译器优化模式（带 patchFlag）
+    start = 0, // 支持偏移卸载：从某个下标开始卸载
   ) => {
     for (let i = start; i < children.length; i++) {
+      // 它逐个调用 unmount() 函数，传入每一个子 vnode。
       unmount(children[i], parentComponent, parentSuspense, doRemove, optimized)
     }
   }
 
+  // 获取下一个真实 DOM 节点
+  // 用于在 patch 阶段查找某个 vnode 对应的“下一个兄弟 DOM 节点”，以便正确插入新的节点。
   const getNextHostNode: NextFn = vnode => {
+    // 1. 如果是组件节点：
     if (vnode.shapeFlag & ShapeFlags.COMPONENT) {
+      // 组件 vnode 没有真实 DOM；
+      // 需要进入 component.subTree 继续找；
+      // 递归到底部真实节点。
       return getNextHostNode(vnode.component!.subTree)
     }
+
+    // 2. 如果是 <Suspense> 节点：
     if (__FEATURE_SUSPENSE__ && vnode.shapeFlag & ShapeFlags.SUSPENSE) {
+      // 调用 vnode.suspense!.next() 获取 suspense 尾部 DOM 节点；
+      // Suspense 的 DOM 结构比较特殊，有内容区/备用区。
       return vnode.suspense!.next()
     }
+
+    //3. 常规 vnode：
+    // 查找当前 vnode 的末尾节点后面的 DOM 节点；
+    // vnode.anchor 表示一组静态或 fragment 的尾节点；
+    // 如果没有 anchor，用 el。
     const el = hostNextSibling((vnode.anchor || vnode.el)!)
     // #9071, #9313
     // teleported content can mess up nextSibling searches during patch so
     // we need to skip them during nextSibling search
+    // 4. 特殊处理：Teleport 传送内容
+    // Teleport 会“跳过”真实 DOM 节点位置；
+    // 必须从传送结束点（teleportEnd）后继续查找。
     const teleportEnd = el && el[TeleportEndKey]
     return teleportEnd ? hostNextSibling(teleportEnd) : el
   }
 
   let isFlushing = false
   // 创建渲染函数
+  // 根渲染函数（Vue 应用入口）
   const render: RootRenderFunction = (vnode, container, namespace) => {
+    // 1. 卸载逻辑：
     if (vnode == null) {
+      // 表示“卸载当前组件”；
+      // 比如 <App /> 改为 null，或服务端调用 app.unmount()。
       if (container._vnode) {
         // 无新的vnode入参 则代表是卸载
         unmount(container._vnode, null, null, true)
       }
     } else {
       // 挂载分支
+      // 2. 初次或更新渲染：
       patch(
         container._vnode || null,
         vnode,
@@ -2682,7 +2952,15 @@ function baseCreateRenderer(
       )
     }
     // 保存当前渲染完毕的根VNode在容器上
+    // 3. 记录根 vnode
+    // 把当前 vnode 记录在容器上；
+    // 下次渲染时作为旧 vnode 使用。
     container._vnode = vnode
+
+    // 4. 调度渲染后任务：
+    // flushPreFlushCbs(): flush 生命周期 beforeUpdate, watch 等前置任务；
+    // flushPostFlushCbs(): flush 生命周期 mounted/updated、transition、directive 等后置任务；
+    // isFlushing 防止递归嵌套执行。
     if (!isFlushing) {
       isFlushing = true
       // 执行postFlush任务队列
@@ -2692,19 +2970,32 @@ function baseCreateRenderer(
     }
   }
 
+  // 使用目的：
+  // Vue 内部 patch 流程需要这些基础操作；
+  // 如果启用了 SSR hydration，也需要用这些方法创建 hydrate 函数。
+  // 这是一种“注入依赖”的做法，让 createHydrationFunctions() 不直接访问全局函数，而是通过显式传参拿到这些原语。
   const internals: RendererInternals = {
-    p: patch,
-    um: unmount,
-    m: move,
-    r: remove,
-    mt: mountComponent,
-    mc: mountChildren,
-    pc: patchChildren,
-    pbc: patchBlockChildren,
-    n: getNextHostNode,
-    o: options,
+    p: patch, // 递归 patch vnode 树
+    um: unmount, // 卸载 vnode
+    m: move, // 移动 vnode（用于 transition, fragment）
+    r: remove, // 移除 vnode（通常配合 anchor）
+    mt: mountComponent, // 挂载组件
+    mc: mountChildren, // 挂载数组子节点
+    pc: patchChildren, // diff 子节点
+    pbc: patchBlockChildren, // diff 编译优化的 block children
+    n: getNextHostNode, // 获取 vnode 对应的下一个真实 DOM 节点
+    o: options, // 宿主平台操作（createElement、patchProp 等）
   }
 
+  // 功能：
+  // 如果传入了 createHydrationFns，说明当前正在构建一个支持 SSR 的渲染器；
+  // 会调用 createHydrationFunctions()，生成：
+  // hydrate()：入口方法，用于激活整个 vnode 树；
+  // hydrateNode()：处理单个 vnode 和已有 DOM 对应关系的核心方法。
+  //
+  // 特别说明：
+  // 这段逻辑只在你使用 createHydrationRenderer() 时才存在；
+  // 如果只是用 createRenderer()，这两个变量是 undefined。
   let hydrate: ReturnType<typeof createHydrationFunctions>[0] | undefined
   let hydrateNode: ReturnType<typeof createHydrationFunctions>[1] | undefined
   if (createHydrationFns) {
@@ -2714,6 +3005,9 @@ function baseCreateRenderer(
   }
   // 返回渲染器对象
   return {
+    // ender	渲染 vnode 到指定容器（初次 or 更新）
+    // hydrate	激活 SSR 已生成的 HTML 结构（可选，SSR only）
+    // createApp	创建 Vue 应用实例，调用的是 createAppAPI()
     render,
     hydrate,
     createApp: createAppAPI(render, hydrate),
