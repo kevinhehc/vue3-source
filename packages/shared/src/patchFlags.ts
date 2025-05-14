@@ -16,14 +16,19 @@
  * Check the `patchElement` function in '../../runtime-core/src/renderer.ts' to see how the
  * flags are handled during diff.
  */
+// 用于标记虚拟节点（VNode）中哪些部分是动态的、需要更新的，从而让运行时只针对变化的部分执行 diff，提高性能。
 export enum PatchFlags {
   /**
    * Indicates an element with dynamic textContent (children fast path)
+   * 表示节点的 textContent 是动态的。
+   * 编译时 {{ msg }} 会生成带这个标志的 VNode。
    */
   TEXT = 1,
 
   /**
    * Indicates an element with dynamic class binding.
+   * 表示 class 是动态绑定的，例如 :class="dynamicClass"。
+   * 会在 patch 中专门优化 class 的设置。
    */
   CLASS = 1 << 1,
 
@@ -37,6 +42,8 @@ export enum PatchFlags {
    * const style = { color: 'red' }
    * render() { return e('div', { style }) }
    * ```
+   * 表示 style 是动态的。
+   * Vue 会静态提升样式对象，并对动态样式做 diff 优化。
    */
   STYLE = 1 << 2,
 
@@ -46,6 +53,9 @@ export enum PatchFlags {
    * class/style). when this flag is present, the vnode also has a dynamicProps
    * array that contains the keys of the props that may change so the runtime
    * can diff them faster (without having to worry about removed props)
+   *
+   * 表示有非 class/style 的 props 是动态的，例如 :id="someId"。
+   * 对应的 vnode 会有 dynamicProps 数组，优化更新时只比较那些 key。
    */
   PROPS = 1 << 3,
 
@@ -53,6 +63,9 @@ export enum PatchFlags {
    * Indicates an element with props with dynamic keys. When keys change, a full
    * diff is always needed to remove the old key. This flag is mutually
    * exclusive with CLASS, STYLE and PROPS.
+   *
+   * 表示 props 的 key 是动态的（如 v-bind="obj"），必须全量 diff props。
+   * 和上面的 CLASS / STYLE / PROPS 是互斥的。
    */
   FULL_PROPS = 1 << 4,
 
@@ -60,21 +73,27 @@ export enum PatchFlags {
    * Indicates an element that requires props hydration
    * (but not necessarily patching)
    * e.g. event listeners & v-bind with prop modifier
+   *
+   * 用于 SSR hydration 阶段，指示这些节点需要做属性注入（如事件监听器）但不需要 patch DOM 内容。
    */
   NEED_HYDRATION = 1 << 5,
 
   /**
    * Indicates a fragment whose children order doesn't change.
+   * 表示 fragment（片段）中的子节点顺序是稳定的（不会改变）。
+   * Diff 会用线性比较提升效率。
    */
   STABLE_FRAGMENT = 1 << 6,
 
   /**
    * Indicates a fragment with keyed or partially keyed children
+   * v-for 渲染列表。
    */
   KEYED_FRAGMENT = 1 << 7,
 
   /**
    * Indicates a fragment with unkeyed children.
+   * v-for 渲染列表。
    */
   UNKEYED_FRAGMENT = 1 << 8,
 
@@ -83,6 +102,9 @@ export enum PatchFlags {
    * directives (onVnodeXXX hooks). since every patched vnode checks for refs
    * and onVnodeXXX hooks, it simply marks the vnode so that a parent block
    * will track it.
+   *
+   * 需要执行非 props 的 patch，如 ref 或 onVnodeMounted。
+   * 这类 vnode 本身内容可能是静态的，但仍需要 patch。
    */
   NEED_PATCH = 1 << 9,
 
@@ -90,6 +112,11 @@ export enum PatchFlags {
    * Indicates a component with dynamic slots (e.g. slot that references a v-for
    * iterated value, or dynamic slot names).
    * Components with this flag are always force updated.
+   *
+   * 表示组件的插槽是动态的，比如：
+   * v-for 中生成的 slot；
+   * 动态 slot 名称；
+   * 这些组件必须强制更新。
    */
   DYNAMIC_SLOTS = 1 << 10,
 
@@ -97,6 +124,9 @@ export enum PatchFlags {
    * Indicates a fragment that was created only because the user has placed
    * comments at the root level of a template. This is a dev-only flag since
    * comments are stripped in production.
+   *
+   * 仅在开发模式使用。
+   * 这是为了支持开发者写了多行注释在模板根部时，Vue 创建了额外的 Fragment 包裹这些注释。
    */
   DEV_ROOT_FRAGMENT = 1 << 11,
 
@@ -111,6 +141,10 @@ export enum PatchFlags {
   /**
    * Indicates a cached static vnode. This is also a hint for hydration to skip
    * the entire sub tree since static content never needs to be updated.
+   *
+   * 表示这是一个缓存的静态 vnode（通常来自 v-once 或静态提升块）；
+   * Vue 会跳过整个 subtree 的 patch；
+   * Hydration 时也直接跳过这个节点。
    */
   CACHED = -1,
   /**
@@ -119,6 +153,12 @@ export enum PatchFlags {
    * when encountering non-compiler generated slots (i.e. manually written
    * render functions, which should always be fully diffed)
    * OR manually cloneVNodes
+   *
+   * 触发 Vue 的 diff 算法退出 optimized 模式，进入 full diff。
+   * 用于处理以下情况：
+   * 手写 render 函数；
+   * renderSlot() 渲染插槽时，无法静态分析内容；
+   * 手动 cloneVNode() 时的防御性处理。
    */
   BAIL = -2,
 }

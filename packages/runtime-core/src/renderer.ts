@@ -376,6 +376,14 @@ export enum MoveType {
   REORDER, // 子节点顺序调整
 }
 
+// Vue 3 内部调度机制中用于**推迟执行渲染后副作用（如 transition、DOM 操作等）**的一个函数别名或封装。
+// 它的定义是带有条件编译的。
+// 将一个函数（通常是 副作用函数，如 transition 动画的 afterEnter 等）安排到 渲染结束之后再执行。
+// 这个“渲染后”指的是：
+// Vue 完成了当前组件的 DOM patch/update；
+// 并且执行了微任务队列中的其他更新；
+// 然后再执行这些回调。
+// 也就是 Vue 的响应式调度队列中的 post-render 阶段。
 export const queuePostRenderEffect: (
   fn: SchedulerJobs,
   suspense: SuspenseBoundary | null,
@@ -383,9 +391,17 @@ export const queuePostRenderEffect: (
   ? __TEST__
     ? // vitest can't seem to handle eager circular dependency
       (fn: Function | Function[], suspense: SuspenseBoundary | null) =>
+        // queueEffectWithSuspense(fn, suspense)
+        // 用于将副作用加入到当前 SuspenseBoundary 的副作用队列中；
+        // 如果没有 suspense，则直接进入 queuePostFlushCb;
+        // 支持嵌套异步子树挂载完成后再统一触发副作用，确保时序一致。
         queueEffectWithSuspense(fn, suspense)
     : queueEffectWithSuspense
-  : queuePostFlushCb
+  : // queuePostFlushCb(fn)
+    // 是 Vue 核心的调度器中的一个 API，用于将 fn 加入 postFlushCbs 队列；
+    // 会在当前渲染队列全部 flush 后执行；
+    // 是非 suspense 环境下的默认行为。
+    queuePostFlushCb
 
 /**
  * The createRenderer function accepts two generic arguments:
@@ -402,6 +418,19 @@ export const queuePostRenderEffect: (
  * })
  * ```
  */
+// nodeOps 是 DOM 基础操作的封装，比如 insert, remove, createElement。
+// patchProp 是属性更新逻辑，比如设置 class, style, onClick 等。
+
+// 接收一个平台相关的 options 参数（比如操作 DOM 的函数）。
+// 返回一个渲染器对象，包含：
+// render()
+// createApp()
+//
+// 还有内部用于 patch、mount、unmount 的函数等。
+// 这个函数是 Vue 跨平台渲染能力的基础，例如：
+// @vue/runtime-dom 调用 createRenderer<Node, Element>()，构造浏览器渲染器；
+// @vue/runtime-core 提供核心逻辑，不绑定任何平台；
+// 自定义平台（如微信小程序）可以自己实现一套 nodeOps 和 patchProp，然后用它生成自己的 Vue 渲染器。
 export function createRenderer<
   HostNode = RendererNode,
   HostElement = RendererElement,
@@ -412,6 +441,11 @@ export function createRenderer<
 // Separate API for creating hydration-enabled renderer.
 // Hydration logic is only used when calling this function, making it
 // tree-shakable.
+// 创建一个支持 SSR hydration 的渲染器。
+//
+// 在 SSR 场景中，Vue 在客户端不会完全重新创建 DOM，而是要“激活”已有 HTML 内容。
+//
+// 这个函数会额外注入 hydration 逻辑（createHydrationFunctions）。
 export function createHydrationRenderer(
   options: RendererOptions<Node, Element>,
 ): HydrationRenderer {
@@ -436,30 +470,38 @@ function baseCreateRenderer(
   createHydrationFns?: typeof createHydrationFunctions,
 ): any {
   // compile-time feature flags check
+  // __ESM_BUNDLER__: 表示当前构建目标是 ESM 模块（如 Vite、Rollup）。
+  // __TEST__: 测试环境中不执行。
   if (__ESM_BUNDLER__ && !__TEST__) {
+    // initFeatureFlags 这个函数通常会从环境变量读取功能标志（例如 __FEATURE_SUSPENSE__, __FEATURE_OPTIONS_API__），
+    // 启用/禁用编译时特性。这些特性会影响运行时和编译器的行为，比如是否支持 <Suspense>、是否支持选项式 API。
     initFeatureFlags()
   }
 
+  // 获取当前全局对象（浏览器中是 window，Node 中是 global）；
+  // 设置 __VUE__ = true，用于识别当前环境中是否有 Vue 在运行（DevTools 会用到）。
   const target = getGlobalThis()
   target.__VUE__ = true
   if (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
+    // 如果处于开发模式或启用了生产环境调试支持，就注册 Vue Devtools 的全局 hook。
+    // 这个 hook 是 DevTools 和 Vue 通信的桥梁。
     setDevtoolsHook(target.__VUE_DEVTOOLS_GLOBAL_HOOK__, target)
   }
 
   // 从options中拿出宿主平台的api
   const {
-    insert: hostInsert,
-    remove: hostRemove,
-    patchProp: hostPatchProp,
-    createElement: hostCreateElement,
-    createText: hostCreateText,
-    createComment: hostCreateComment,
-    setText: hostSetText,
-    setElementText: hostSetElementText,
-    parentNode: hostParentNode,
-    nextSibling: hostNextSibling,
-    setScopeId: hostSetScopeId = NOOP,
-    insertStaticContent: hostInsertStaticContent,
+    insert: hostInsert, // 插入一个节点到父节点中，用于 mount、patch（例如 parent.insertBefore）
+    remove: hostRemove, // 删除一个节点，用于 unmount
+    patchProp: hostPatchProp, // 更新属性/事件/样式，是 updateProps 的核心依赖
+    createElement: hostCreateElement, // 创建元素节点（如 <div>），返回宿主平台的节点
+    createText: hostCreateText, // 创建文本节点，返回宿主平台的 text node
+    createComment: hostCreateComment, // 创建注释节点（如 v-if 的占位）
+    setText: hostSetText, // 设置文本节点的内容（用于 textVNode）
+    setElementText: hostSetElementText, // 设置元素的 textContent（用于清空 children）
+    parentNode: hostParentNode, // 获取某个节点的父节点
+    nextSibling: hostNextSibling, // 获取下一个兄弟节点
+    setScopeId: hostSetScopeId = NOOP, // 仅 SSR 中使用，注入作用域 ID（默认是 NOOP）
+    insertStaticContent: hostInsertStaticContent, // 批量插入静态内容 vnode（用于优化静态节点块）
   } = options
 
   // Note: functions inside this closure should use `const xxx = () => {}`
@@ -492,6 +534,7 @@ function baseCreateRenderer(
       n1 = null
     }
 
+    // // 退出优化路径，执行完整 diff
     if (n2.patchFlag === PatchFlags.BAIL) {
       optimized = false
       n2.dynamicChildren = null
@@ -597,44 +640,75 @@ function baseCreateRenderer(
     }
   }
 
+  // 用于处理 文本节点（Text VNode）的挂载和更新，是 patch() 分支中专门针对 type === Text 的 vnode 的处理函数。
+  //   n1,              // 旧的 Text vnode，可能为 null（表示初次挂载）
+  //   n2,              // 新的 Text vnode
+  //   container,       // 父容器（真实 DOM 元素）
+  //   anchor           // 锚点，插入时用于定位位置（insertBefore）
   const processText: ProcessTextOrCommentFn = (n1, n2, container, anchor) => {
+    // 初次挂载（n1 == null）
     if (n1 == null) {
+      // 使用 hostInsert() 插入到真实 DOM 中（如 insertBefore）。
       hostInsert(
+        // 创建一个真实的 DOM 文本节点：
+        // 设置到 vnode 的 el 属性上。
         (n2.el = hostCreateText(n2.children as string)),
         container,
         anchor,
       )
     } else {
+      // 更新文本节点（n1 != null）
       const el = (n2.el = n1.el!)
+      // 将旧 vnode 的 el 传递给新的 vnode。
+      // 如果文本内容发生了变化，则调用：
       if (n2.children !== n1.children) {
+        // 实际上是：el.nodeValue = newText
+        // 这样可以只修改文本内容而不是重新创建节点。
         hostSetText(el, n2.children as string)
       }
     }
   }
 
+  // 是虚拟节点（VNode）处理流程中专门处理注释节点（Comment VNode）的逻辑。
+  // 它的结构与 processText 很相似，但逻辑更加简单，因为注释节点在 Vue 中是静态的，不支持动态更新。
+  //   n1,         // 旧 VNode，可能为 null（初次挂载）
+  //   n2,         // 新的注释类型 VNode
+  //   container,  // 父容器
+  //   anchor      // 插入锚点
   const processCommentNode: ProcessTextOrCommentFn = (
     n1,
     n2,
     container,
     anchor,
   ) => {
+    // 初次挂载（n1 == null）
     if (n1 == null) {
+      // 将返回的 DOM 节点挂到 n2.el；
+      // 使用 hostInsert 插入到指定位置。
+      // 即使 n2.children 是 undefined，也会创建一个空注释节点。
       hostInsert(
+        // 创建一个注释节点（例如 <-- some comment -->）：
         (n2.el = hostCreateComment((n2.children as string) || '')),
         container,
         anchor,
       )
     } else {
+      // 更新注释节点（n1 != null）
+      // Vue 不支持动态注释节点内容的更新；
+      // 所以直接复用旧的 DOM 节点，不做任何内容对比或修改；
+      // 仅将 n1.el 赋值给 n2.el，确保 vnode 链接正确。
       // there's no support for dynamic comments
       n2.el = n1.el
     }
   }
 
+  // 属于渲染器中的优化逻辑，用于挂载静态节点（static VNode）
+  // 将编译器生成的静态 vnode（即不变的 HTML 结构）插入 DOM，并缓存其起始和结束位置（用于后续 diff 快速复用或跳过）。
   const mountStaticNode = (
-    n2: VNode,
-    container: RendererElement,
-    anchor: RendererNode | null,
-    namespace: ElementNamespace,
+    n2: VNode, // 当前 static VNode
+    container: RendererElement, // 挂载的父 DOM 元素
+    anchor: RendererNode | null, // DOM 插入位置的锚点
+    namespace: ElementNamespace, // 命名空间（HTML、SVG 等）
   ) => {
     // static nodes are only present when used with compiler-dom/runtime-dom
     // which guarantees presence of hostInsertStaticContent.
@@ -651,14 +725,27 @@ function baseCreateRenderer(
   /**
    * Dev / HMR only
    */
+  // 用于处理**静态节点（static vnode）在开发模式下的热重载更新（HMR）**的逻辑。
+  // 这个函数只在开发环境中生效，生产环境下静态节点不会被 patch，因为它们被视为“永远不会变”的内容。
   const patchStaticNode = (
-    n1: VNode,
-    n2: VNode,
-    container: RendererElement,
-    namespace: ElementNamespace,
+    n1: VNode, // 旧的静态 vnode
+    n2: VNode, // 新的静态 vnode
+    container: RendererElement, // 容器 DOM 节点
+    namespace: ElementNamespace, // HTML/SVG/MathML 命名空间
   ) => {
     // static nodes are only patched during dev for HMR
+    // children 是静态内容的字符串（比如 <div>hello</div>）；
+    // 只有当内容变化时才会触发重新 patch。
     if (n2.children !== n1.children) {
+      // 如果变了：重建 DOM 结构
+      // 找到旧静态节点后面的位置（anchor）：
+      // 用于确定新插入节点的位置；
+      // n1.anchor 是之前挂载时记录的尾节点。
+      // 移除旧的静态节点树：
+      // removeStaticNode(n1) 会从 DOM 中移除起始到结束范围内的所有节点。
+      // 插入新的静态节点：
+      // 使用 hostInsertStaticContent() 重新根据新的 HTML 字符串插入内容；
+      // 返回新的起始节点和 anchor 节点。
       const anchor = hostNextSibling(n1.anchor!)
       // remove existing
       removeStaticNode(n1)
@@ -670,6 +757,8 @@ function baseCreateRenderer(
         namespace,
       )
     } else {
+      // 如果内容没变：复用旧节点
+      // 不执行任何 DOM 操作，只是让新 vnode 持有旧 vnode 的 DOM 引用。
       n2.el = n1.el
       n2.anchor = n1.anchor
     }
@@ -2631,7 +2720,14 @@ function baseCreateRenderer(
   }
 }
 
+//  Vue 3 内部在生成 DOM 元素树（VNode -> DOM）过程中，用于确定子节点应该使用哪个 XML 命名空间（namespace） 的工具函数。
 function resolveChildrenNamespace(
+  // type: 当前 vnode 的标签名（如 'div', 'svg', 'foreignObject', 'annotation-xml' 等）。
+  // props: vnode 的属性集合。
+  // currentNamespace: 当前父级节点的命名空间，比如：
+  // 'svg'：在 <svg> 元素内；
+  // 'mathml'：在 <math> 元素内；
+  // undefined：普通 HTML 空间。
   { type, props }: VNode,
   currentNamespace: ElementNamespace,
 ): ElementNamespace {
@@ -2645,10 +2741,17 @@ function resolveChildrenNamespace(
     : currentNamespace
 }
 
+// 用于启用或禁用组件渲染副作用中的递归更新行为。
+// 它通常与组件嵌套更新、调度器、suspense、transition 等机制协同工作。
 function toggleRecurse(
+  // effect: 是这个组件的渲染副作用（ReactiveEffect）。
+  // job: 是组件的调度任务（SchedulerJob），通常就是 update()。
+  // allowed: 一个布尔值，表示是否允许递归更新。
   { effect, job }: ComponentInternalInstance,
   allowed: boolean,
 ) {
+  // 使用按位操作 |= 和 &= ~ 来设置或清除 ALLOW_RECURSE 标志位。
+  // 目的是控制当前组件是否在更新过程中允许递归自身更新。
   if (allowed) {
     effect.flags |= EffectFlags.ALLOW_RECURSE
     job.flags! |= SchedulerJobFlags.ALLOW_RECURSE
@@ -2656,15 +2759,30 @@ function toggleRecurse(
     effect.flags &= ~EffectFlags.ALLOW_RECURSE
     job.flags! &= ~SchedulerJobFlags.ALLOW_RECURSE
   }
+
+  // 在 Vue 的组件更新调度机制中，有一种叫做“递归更新”（recurse update）的情况，例如：
+  // 在组件的 updated 钩子里，触发自身响应式数据的变化；
+  // 或在子组件更新过程中又触发父组件更新，进而又影响子组件（形成循环）；
+  // 或组件嵌套使用 <Suspense> 或 <Transition> 时，在一些边界时刻需要暂时禁止递归触发更新，以确保稳定性和性能。
+  // 所以 Vue 引入了一个“允许递归”标志位，在某些关键时刻临时关闭它：
+  // ALLOW_RECURSE 为关 → 当前组件在本次调度中不可被再次递归触发更新；
+  // ALLOW_RECURSE 为开 → 恢复正常的响应式递归行为。
 }
 
+// 用于判断某个组件或元素**是否应该执行过渡动画（transition）**的条件判断逻辑之一，通常在组件或元素进入、更新时决定是否启动过渡效果。
 export function needTransition(
+  // parentSuspense: 当前元素或组件的父 Suspense 实例，可能为 null。
+  // transition: 当前元素或组件的过渡钩子对象（TransitionHooks），如果没有绑定 <transition>，则为 null。
   parentSuspense: SuspenseBoundary | null,
   transition: TransitionHooks | null,
 ): boolean | null {
   return (
-    (!parentSuspense || (parentSuspense && !parentSuspense.pendingBranch)) &&
+    // 没有 Suspense：表示不是在一个 Suspense 控制的异步子树中。
+    // 有 Suspense，但没有未解析的异步分支（pendingBranch）：说明已经 resolve，可以正常进行动画。
+    (!parentSuspense || (parentSuspense && !parentSuspense.pendingBranch)) && // 组件或节点不被挂起状态控制。
     transition &&
+    // transition.persisted === true 意味着这个过渡是在 SSR hydrate 时保留的状态，不应该在客户端重新执行动画。
+    // 所以如果 persisted 是 false，才允许执行过渡。
     !transition.persisted
   )
 }
@@ -2674,12 +2792,17 @@ export function needTransition(
  * When a component is HMR-enabled, we need to make sure that all static nodes
  * inside a block also inherit the DOM element from the previous tree so that
  * HMR updates (which are full updates) can retrieve the element for patching.
+ * HMR 更新是全量替换组件树（非 diff），如果静态 vnode 没有 el，就无法正确 patch。
  *
  * #2080
  * Inside keyed `template` fragment static children, if a fragment is moved,
  * the children will always be moved. Therefore, in order to ensure correct move
  * position, el should be inherited from previous nodes.
+ * Keyed Fragment 的子节点在移动时，其所有静态子节点也要随之移动，需要保留原始 el。
  */
+// 用于在静态节点之间继承 DOM 元素（el），
+// 在 HMR（热模块替换）更新 或 keyed fragment 移动 的优化路径中非常关键。
+// 将旧虚拟节点树（n1）中的静态子节点对应的 DOM 元素（el）拷贝给 新的虚拟节点树（n2）中的静态子节点。
 export function traverseStaticChildren(
   n1: VNode,
   n2: VNode,
@@ -2687,26 +2810,43 @@ export function traverseStaticChildren(
 ): void {
   const ch1 = n1.children
   const ch2 = n2.children
+  // 保证两个节点都具有子节点，并且它们是数组（即一组 vnode）。
   if (isArray(ch1) && isArray(ch2)) {
+    // 遍历两个 vnode 的子节点
     for (let i = 0; i < ch1.length; i++) {
       // this is only called in the optimized path so array children are
       // guaranteed to be vnodes
+      // c1 是旧 vnode 的子节点，c2 是新 vnode 的子节点。
+      // 要把 c1.el 的引用传递到 c2 中。
       const c1 = ch1[i] as VNode
       let c2 = ch2[i] as VNode
+      // shapeFlag & ShapeFlags.ELEMENT: 表示当前 vnode 是一个 HTML 元素。
+      // dynamicChildren: 只有 block 结构中的动态节点才会有这个属性，静态 vnode 没有。
+      // 处理静态元素节点：
       if (c2.shapeFlag & ShapeFlags.ELEMENT && !c2.dynamicChildren) {
+        // 判断是静态节点（patchFlag 为 0 或 hydration）。
+        // 如果是挂载过的 vnode，会 clone 新 vnode（不能复用已挂载 vnode）。
+        // 递归处理嵌套的静态 vnode。
+        // patchFlag <= 0: 表示 vnode 是静态节点。
+        // PatchFlags.NEED_HYDRATION: 表示 vnode 需要 hydration（SSR 相关），也可以当作静态 vnode 处理。
         if (c2.patchFlag <= 0 || c2.patchFlag === PatchFlags.NEED_HYDRATION) {
+          // cloneIfMounted(vnode): 如果 vnode 已经挂载，会 clone 出一个新的 vnode 对象，以免直接修改已挂载结构。
           c2 = ch2[i] = cloneIfMounted(ch2[i] as VNode)
           c2.el = c1.el
         }
+        // PatchFlags.BAIL: 静态节点的 patch 被跳过，不再深入比较。
         if (!shallow && c2.patchFlag !== PatchFlags.BAIL)
           traverseStaticChildren(c1, c2)
       }
       // #6852 also inherit for text nodes
+      // 处理 Text 节点
+      // 文本节点不是元素，但在 patch 中也需要正确的 DOM 引用。
       if (c2.type === Text) {
         c2.el = c1.el
       }
       // also inherit for comment nodes, but not placeholders (e.g. v-if which
       // would have received .el during block patch)
+      // 处理 Comment 节点（只在开发模式生效）：
       if (__DEV__ && c2.type === Comment && !c2.el) {
         c2.el = c1.el
       }
@@ -2714,21 +2854,27 @@ export function traverseStaticChildren(
   }
 }
 
+// 查找数组的最长递增子序列（LIS）。
 // https://en.wikipedia.org/wiki/Longest_increasing_subsequence
 function getSequence(arr: number[]): number[] {
+  // 用于记录前驱索引，后续回溯路径
   const p = arr.slice()
+  // result 保存的是 arr 中索引的列表，形成的是一个递增序列的索引路径
   const result = [0]
   let i, j, u, v, c
   const len = arr.length
   for (i = 0; i < len; i++) {
     const arrI = arr[i]
     if (arrI !== 0) {
-      j = result[result.length - 1]
+      // 忽略值为 0 的元素（这些通常代表“新节点”）
+      j = result[result.length - 1] // 当前 LIS 的最后一个索引
       if (arr[j] < arrI) {
-        p[i] = j
+        p[i] = j // 当前 LIS 的最后一个索引
         result.push(i)
         continue
       }
+
+      // 二分查找 result 中第一个大于等于 arrI 的位置
       u = 0
       v = result.length - 1
       while (u < v) {
@@ -2741,12 +2887,14 @@ function getSequence(arr: number[]): number[] {
       }
       if (arrI < arr[result[u]]) {
         if (u > 0) {
-          p[i] = result[u - 1]
+          p[i] = result[u - 1] // 记录前驱
         }
         result[u] = i
       }
     }
   }
+
+  // 回溯构建最终 LIS 的索引序列
   u = result.length
   v = result[u - 1]
   while (u-- > 0) {
@@ -2756,22 +2904,25 @@ function getSequence(arr: number[]): number[] {
   return result
 }
 
+// 查找未被 hydration 的异步根组件。
 function locateNonHydratedAsyncRoot(
   instance: ComponentInternalInstance,
 ): ComponentInternalInstance | undefined {
-  const subComponent = instance.subTree.component
+  const subComponent = instance.subTree.component // 当前 vnode 对应的子组件实例
   if (subComponent) {
     if (subComponent.asyncDep && !subComponent.asyncResolved) {
-      return subComponent
+      return subComponent // 找到未 resolved 的异步组件
     } else {
-      return locateNonHydratedAsyncRoot(subComponent)
+      return locateNonHydratedAsyncRoot(subComponent) // 递归向下找
     }
   }
 }
 
+// 标记生命周期钩子为失效。
 export function invalidateMount(hooks: LifecycleHook): void {
   if (hooks) {
     for (let i = 0; i < hooks.length; i++)
+      // SchedulerJobFlags.DISPOSED 是 scheduler.ts 中定义的一个位掩码，表示当前任务不再有效。
       hooks[i].flags! |= SchedulerJobFlags.DISPOSED
   }
 }

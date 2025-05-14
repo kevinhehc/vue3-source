@@ -230,6 +230,8 @@ export interface VNode<
 
   // optimization only
   // vnode 优化标识
+  // "VNode Shape Flag"（虚拟节点形状标志）
+  // 这是 Vue 3 内部用于标识 VNode 结构和类型特征 的位掩码（bitwise flag），帮助运行时更高效地判断和处理虚拟节点的类型、结构、行为等。
   shapeFlag: number
   // patch 标识
   patchFlag: number

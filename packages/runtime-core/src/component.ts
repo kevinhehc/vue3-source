@@ -313,7 +313,14 @@ export type InternalRenderFunction = {
  * We expose a subset of properties on the internal instance as they are
  * useful for advanced external libraries and tools.
  */
+// Vue 内部用于描述一个组件实例的数据结构。
+// 几乎所有的运行时行为——包括组件的挂载、更新、卸载、diff、渲染、副作用追踪、事件发射等——都与它息息相关。
 export interface ComponentInternalInstance {
+  //   - `uid`: 实例唯一 ID。
+  //   - `type`: 当前组件定义（如 `MyComponent`）。
+  //   - `parent`: 父组件实例。
+  //   - `root`: 根组件实例。
+  //   - `appContext`: 全局配置（`provide`/`inject`、插件、全局组件等）。
   uid: number
   type: ConcreteComponent
   parent: ComponentInternalInstance | null
@@ -335,24 +342,29 @@ export interface ComponentInternalInstance {
   /**
    * Render effect instance
    */
+  // 包裹渲染逻辑的响应式副作用。
   effect: ReactiveEffect
   /**
    * Force update render effect
    */
+  // 用于触发组件更新。
   update: () => void
   /**
    * Render effect job to be passed to scheduler (checks if dirty)
    */
+  //  实际用于调度器中的任务函数（一般就是 `update`）。
   job: SchedulerJob
   /**
    * The render function that returns vdom tree.
    * @internal
    */
+  // 编译生成的渲染函数。
   render: InternalRenderFunction | null
   /**
    * SSR render function
    * @internal
    */
+  // 用于 SSR。
   ssrRender?: Function | null
   /**
    * Object containing values this component provides for its descendants
@@ -382,6 +394,7 @@ export interface ComponentInternalInstance {
    * after initialized (e.g. inline handlers)
    * @internal
    */
+  // 缓存一些渲染用的值，比如 inline handler。
   renderCache: (Function | VNode | undefined)[]
 
   /**
@@ -436,7 +449,9 @@ export interface ComponentInternalInstance {
   proxy: ComponentPublicInstance | null
 
   // exposed properties via expose()
+  // 暴露给父组件的对象。
   exposed: Record<string, any> | null
+  // 对 exposed 做代理，用于外部访问。
   exposeProxy: Record<string, any> | null
 
   /**
@@ -444,6 +459,7 @@ export interface ComponentInternalInstance {
    * `with` block
    * @internal
    */
+  // setup() + runtime-compiled 场景下对 this 的代理。
   withProxy: ComponentPublicInstance | null
   /**
    * This is the target for the public instance proxy. It also holds properties
@@ -451,14 +467,21 @@ export interface ComponentInternalInstance {
    * custom properties (via `this.x = ...`)
    * @internal
    */
+  // 组件内部 this 的上下文。
   ctx: Data
 
   // state
+  // `data()` 返回的响应式数据。
   data: Data
+  // 接收到的 props。
   props: Data
+  // 非 prop 的属性。
   attrs: Data
+  // 插槽。
   slots: InternalSlots
+  // 模板中的 `$refs`。
   refs: Data
+  // 用于触发事件。
   emit: EmitFn
 
   /**
@@ -476,6 +499,7 @@ export interface ComponentInternalInstance {
    * setup related
    * @internal
    */
+  // setup() 返回的对象。
   setupState: Data
   /**
    * devtools access to additional info
@@ -485,6 +509,7 @@ export interface ComponentInternalInstance {
   /**
    * @internal
    */
+  // 组件使用的 attrs、emit、slots 封装。
   setupContext: SetupContext | null
 
   /**
@@ -500,10 +525,16 @@ export interface ComponentInternalInstance {
   /**
    * @internal
    */
+  // 表示异步组件加载的 Promise 对象。
+  // 它存在于由 defineAsyncComponent() 创建的异步组件实例中。
+  // 当异步组件开始加载时，Vue 会将加载的 Promise 赋值给这个字段。
   asyncDep: Promise<any> | null
   /**
    * @internal
    */
+  // 表示这个异步组件的依赖是否已经加载完成。
+  // 也就是说，是否已经成功 resolve 异步组件、并将其挂载到组件树上。
+  // 初始为 false，当组件加载成功后 Vue 内部会将其设为 true。
   asyncResolved: boolean
 
   // lifecycle

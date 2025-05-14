@@ -13,6 +13,10 @@ declare var __COMPAT__: boolean // true（启用 Vue2 兼容性模式）	用于 
 // Feature flags
 declare var __FEATURE_OPTIONS_API__: boolean // 是否包含 Options API（data(), methods, computed 等）
 declare var __FEATURE_PROD_DEVTOOLS__: boolean // false（生产）/ true（开发）	是否在生产环境启用 devtools 支持
+// __FEATURE_SUSPENSE__
+// 这是一个编译阶段常量，表示是否启用了 Suspense 特性。如果开启：
+// 会使用支持 Suspense 的调度逻辑（即 queueEffectWithSuspense）；
+// 否则用简单的 queuePostFlushCb。
 declare var __FEATURE_SUSPENSE__: boolean //是否启用 <Suspense> 组件支持
 declare var __FEATURE_PROD_HYDRATION_MISMATCH_DETAILS__: boolean // 控制是否在 SSR hydrate 报错时提供详细信息
 
