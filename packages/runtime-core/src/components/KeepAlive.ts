@@ -49,6 +49,36 @@ import { isAsyncWrapper } from '../apiAsyncComponent'
 import { isSuspense } from './Suspense'
 import { LifecycleHooks } from '../enums'
 
+// 用于缓存状态组件，避免重复卸载和重新创建。
+// 我们可以从以下几个角度深入理解这个实现：
+// 1. KeepAlive 的核心功能是什么？
+// 它的主要目的是：
+// 缓存组件实例，避免重新挂载；
+// 在组件切换时，恢复上次的状态；
+// 支持 include/exclude/max 控制缓存范围与大小；
+// 支持组件生命周期钩子 activated / deactivated；
+// 支持和 Suspense / Transition 组合使用时的正确行为。
+
+// 关键变量	含义
+// cache: Map	缓存组件实例对应的 vnode
+// keys: Set	缓存键顺序列表（用于 FIFO）
+// current	当前激活的 vnode
+// pendingCacheKey	记录当前渲染过程中待缓存的 key
+// storageContainer	离屏容器，用于临时存储被移除的 DOM 元素
+
+// <KeepAlive>
+//  └── setup()
+//        ├── cache Map<Key, VNode>
+//        ├── activate()
+//        ├── deactivate()
+//        ├── watch include/exclude
+//        ├── cacheSubtree()
+//        └── render():
+//             ├── 获取 default() 插槽
+//             ├── 判断是否命中缓存
+//             ├── 设置 shapeFlag
+//             └── 返回 vnode
+
 type MatchPattern = string | RegExp | (string | RegExp)[]
 
 export interface KeepAliveProps {

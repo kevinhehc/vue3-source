@@ -15,6 +15,83 @@ import { ShapeFlags, isString } from '@vue/shared'
 import { warn } from '../warning'
 import { isHmrUpdating } from '../hmr'
 
+// <Teleport> 组件完整的 runtime 实现源码，包括：
+//
+// Teleport 的挂载（process）
+//
+// 卸载（remove）
+//
+// 移动（moveTeleport）
+//
+// hydration（hydrateTeleport）
+//
+// 辅助逻辑如 resolveTarget、prepareAnchor、updateCssVars
+//
+// 我可以为你概括核心实现逻辑、关键设计点、以及特殊边界处理：
+//
+// <Teleport> 实现关键点总结
+// 1. Teleport 的核心职责：
+// 将其子节点挂载到 DOM 树中“另一个位置”，而非父组件默认的插入位置。
+//
+// 2. 初次挂载流程（process(n1 = null)）：
+// 本体插入：
+// 在当前容器插入两个占位锚点：n2.el 和 n2.anchor（通常是 comment node）。
+//
+// 此区域只是逻辑占位，不会实际渲染子内容。
+//
+// 子节点挂载：
+// 根据 props.to 解析真实目标容器（resolveTarget()）。
+//
+// disabled=true：直接挂载子节点到本体锚点之间。
+//
+// 否则：挂载子节点到目标容器内，前后也插入锚点（prepareAnchor()）。
+//
+// defer=true：挂载推迟到 queuePostRenderEffect 中。
+//
+// 3. 更新流程（patchTeleport）：
+// DOM 引用继承：
+// n2.el, n2.anchor, n2.targetStart, n2.targetAnchor 都继承自 n1。
+//
+// 如果目标 to 改变，或 disabled 状态改变，就要执行 DOM 节点移动。
+//
+// 关键情况：
+// 状态变更	处理动作
+// disabled → enabled	子节点从 main container 移到目标
+// enabled → disabled	子节点从目标移回 main container
+// to 目标变更	Teleport 子节点重新插入新目标
+// dynamicChildren 存在	用 block diff 优化
+//
+// 4. 卸载流程（remove）：
+// 移除占位符和目标容器内的锚点。
+//
+// 无论是否 disabled，都卸载子节点（children 总是要卸载的）。
+//
+// 5. 子树移动（moveTeleport）：
+// 根据 TeleportMoveTypes 三种类型：
+//
+// REORDER: 重排当前容器中的 Teleport（如 v-for）。
+//
+// TARGET_CHANGE: 迁移到新目标容器。
+//
+// TOGGLE: 启用/禁用 Teleport 时内容位置切换。
+//
+// 6. Hydration 支持（hydrateTeleport）：
+// 根据服务端 DOM 的结构查找 targetStart/targetAnchor。
+//
+// 如果找不到 fallback anchor，就自动插入空文本锚点保证一致性。
+//
+// 7. Target Resolution（resolveTarget()）：
+// props.to 为字符串时，使用 querySelector() 获取元素。
+//
+// 目标不存在时会 warn（除非 disabled）。
+//
+// 也支持直接传入 DOM 元素。
+//
+// 8. updateCssVars() 支持：
+// 用于支持 v-bind 绑定的 CSS 变量在 teleport 内容上仍能生效。
+//
+// 通过添加 data-v-owner 并调用组件的 .ut() 方法来更新 CSS。
+
 export type TeleportVNode = VNode<RendererNode, RendererElement, TeleportProps>
 
 export interface TeleportProps {

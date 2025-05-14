@@ -150,6 +150,11 @@ function triggerEvent(
   }
 }
 
+// 使用 createSuspenseBoundary() 创建一个 SuspenseBoundary 实例并挂在 vnode.suspense 上。
+// 先将 ssContent（默认插槽）以 suspense.pendingBranch 的形式挂载到 off-DOM 容器。
+// 检查是否有 deps > 0 表示存在异步依赖：
+// 有：触发 onPending、onFallback，并显示 ssFallback。
+// 无：调用 resolve() 直接展示内容分支。
 function mountSuspense(
   vnode: VNode,
   container: RendererElement,
@@ -215,6 +220,12 @@ function mountSuspense(
   }
 }
 
+// 如果当前 Suspense 有 pendingBranch，说明还有未解析的异步组件：
+// 若新旧 pendingBranch 类型相同，则直接 patch。
+// 否则说明切换了内容，重置 state，更新 pendingId 来防止 race condition。
+// 如果没有 pendingBranch，则根据是否类型相同选择：
+// 继续 patch（内容没变）；
+// 否则 mount 新的 pending 内容并 fallback。
 function patchSuspense(
   n1: VNode,
   n2: VNode,
@@ -410,6 +421,13 @@ function patchSuspense(
   }
 }
 
+// 核心属性：
+// activeBranch: 当前激活（已显示）的子树；
+// pendingBranch: 正在等待异步解析的子树；
+// deps: 当前等待的异步数量；
+// resolve(): 当所有 deps 解析后调用，显示 pendingBranch；
+// fallback(): 触发 fallback 显示；
+// effects: 通过 queueEffectWithSuspense() 暂存的副作用，在 resolve 时批量执行。
 export interface SuspenseBoundary {
   vnode: VNode<RendererNode, RendererElement, SuspenseProps>
   parent: SuspenseBoundary | null
@@ -444,6 +462,7 @@ export interface SuspenseBoundary {
 
 let hasWarned = false
 
+// 用于构建每一个 Suspense 边界实例；
 function createSuspenseBoundary(
   vnode: VNode,
   parentSuspense: SuspenseBoundary | null,

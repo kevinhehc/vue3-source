@@ -22,6 +22,13 @@ import { isTeleport } from './Teleport'
 import type { RendererElement } from '../renderer'
 import { SchedulerJobFlags } from '../scheduler'
 
+// <transition> 组件的核心实现（BaseTransition 组件和相关的 TransitionHooks 系统）。这是 Vue 动画系统中最重要的一部分，专门用于处理：
+// 组件或元素的进场 / 离场过渡（包括 appear）；
+// v-if / v-show 动态控制时的过渡钩子执行时机；
+// 内置 mode（in-out、out-in）的流程管理；
+// 配合 KeepAlive / Suspense / Teleport 时的特殊处理；
+// 配合指令（如 v-show）通过 persisted 启用手动控制时的兼容逻辑。
+
 type Hook<T = () => void> = T | T[]
 
 const leaveCbKey: unique symbol = Symbol('_leaveCb')
@@ -142,6 +149,16 @@ const recursiveGetSubtree = (instance: ComponentInternalInstance): VNode => {
   return subTree.component ? recursiveGetSubtree(subTree.component) : subTree
 }
 
+// <BaseTransition>
+//  └── setup()
+//       └── render()
+//            ├── 获取 slot VNode
+//            ├── 调用 resolveTransitionHooks → hooks
+//            ├── 旧 vnode 与新 vnode 比较
+//            │     ├── out-in: 先 leave 再触发 update
+//            │     └── in-out: enter 中控制 delayLeave
+//            ├── setTransitionHooks(vnode, hooks)
+//            └── 返回 VNode
 const BaseTransitionImpl: ComponentOptions = {
   name: `BaseTransition`,
 
@@ -158,6 +175,8 @@ const BaseTransitionImpl: ComponentOptions = {
         return
       }
 
+      // 1. 获取默认插槽中的 VNode 并过滤 Comment
+      // 只能有一个非注释 VNode，否则开发环境报错。
       const child: VNode = findNonCommentChild(children)
       // there's no need to track reactivity for these props so use the raw
       // props for a bit better perf
@@ -180,11 +199,15 @@ const BaseTransitionImpl: ComponentOptions = {
 
       // in the case of <transition><keep-alive/></transition>, we need to
       // compare the type of the kept-alive children.
+      // 2. 获取子节点（去除 KeepAlive 包裹）
+      // 递归提取真实的子元素，避免 KeepAlive, Teleport 等中间壳。
       const innerChild = getInnerChild(child)
       if (!innerChild) {
         return emptyPlaceholder(child)
       }
 
+      // 3. 注册进入过渡钩子
+      // 挂载 vnode.transition = hooks
       let enterHooks = resolveTransitionHooks(
         innerChild,
         rawProps,
@@ -201,6 +224,9 @@ const BaseTransitionImpl: ComponentOptions = {
       let oldInnerChild = instance.subTree && getInnerChild(instance.subTree)
 
       // handle mode
+      // 4. 判断前一帧 vnode 与当前 vnode 类型是否一致
+      // 如果不一致，视 mode（in-out / out-in）执行相应离场策略；
+      // 离场结束后重新触发更新（instance.update()）以进入新元素。
       if (
         oldInnerChild &&
         oldInnerChild.type !== Comment &&
@@ -296,6 +322,7 @@ function findNonCommentChild(children: VNode[]): VNode {
 
 // export the public type for h/tsx inference
 // also to avoid inline import() in generated d.ts files
+// 在渲染阶段负责控制 enter/leave 的调度时机
 export const BaseTransition = BaseTransitionImpl as unknown as {
   new (): {
     $props: BaseTransitionProps<any>
@@ -320,6 +347,7 @@ function getLeavingNodesForType(
 
 // The transition hooks are attached to the vnode as vnode.transition
 // and will be called at appropriate timing in the renderer.
+// 生成挂载在 vnode.transition 上的生命周期钩子集合
 export function resolveTransitionHooks(
   vnode: VNode,
   props: BaseTransitionProps<any>,
@@ -523,6 +551,7 @@ function getInnerChild(vnode: VNode): VNode | undefined {
   }
 }
 
+// 将钩子挂载到 vnode 或组件的子树中
 export function setTransitionHooks(vnode: VNode, hooks: TransitionHooks): void {
   if (vnode.shapeFlag & ShapeFlags.COMPONENT && vnode.component) {
     vnode.transition = hooks
