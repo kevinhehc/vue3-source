@@ -108,14 +108,24 @@ export type EmitFn<
           }[Event]
         >
 
+// 组件内部触发事件的主函数；
 export function emit(
   instance: ComponentInternalInstance,
   event: string,
   ...rawArgs: any[]
 ): ComponentPublicInstance | null | undefined {
+  // 1. 检查组件是否已经卸载
+  // 避免向已经卸载的组件触发事件。
   if (instance.isUnmounted) return
+  // 2. 获取 props（事件监听器挂载点）
+  // Vue 会把所有监听器（如 @click）作为 props 存到 vnode 上。
   const props = instance.vnode.props || EMPTY_OBJ
 
+  // 3. 开发环境警告与事件验证
+  // 检查是否在 emits 中声明了当前事件名；
+  // 如果没有，则尝试在 props 中找对应的处理函数（如 onClick）；
+  // 若都没有，发出开发警告；
+  // 若声明了事件验证函数（emits: { foo: (val) => boolean }），进行参数校验。
   if (__DEV__) {
     const {
       emitsOptions,
@@ -151,6 +161,10 @@ export function emit(
   }
 
   let args = rawArgs
+  // 4. 处理 v-model 修饰符（number / trim）
+  // 如果是 v-model 自动生成的事件（如 update:modelValue）；
+  // 检查 v-model 修饰符（如 v-model.trim）；
+  // 自动对 args 进行转换处理。
   const isModelListener = event.startsWith('update:')
 
   // for v-model update:xxx events, apply modifiers on args
@@ -165,6 +179,8 @@ export function emit(
   }
 
   if (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
+    // 5. 通知 Devtools
+    // 将事件信息发送给 Vue Devtools 进行调试记录。
     devtoolsComponentEmit(instance, event, args)
   }
 
@@ -187,6 +203,12 @@ export function emit(
   }
 
   let handlerName
+  // 6. 查找并执行事件监听器
+  // 尝试用多种方式查找事件监听器的 prop：
+  // onClick
+  // onclick
+  // on-update:modelValue（兼容 kebab-case v-model）
+  // 找到后使用 callWithAsyncErrorHandling 调用监听器，并捕获任何错误。
   let handler =
     props[(handlerName = toHandlerKey(event))] ||
     // also try camelCase event handler (#2249)
@@ -206,6 +228,9 @@ export function emit(
     )
   }
 
+  // 7. 一次性监听器（.once）
+  // 若使用了 .once 修饰符，确保只触发一次。
+  // 触发后标记 instance.emitted[handlerName] = true。
   const onceHandler = props[handlerName + `Once`]
   if (onceHandler) {
     if (!instance.emitted) {
@@ -222,12 +247,18 @@ export function emit(
     )
   }
 
+  // 8. 兼容性处理（Vue 2 模式）
   if (__COMPAT__) {
     compatModelEmit(instance, event, args)
     return compatInstanceEmit(instance, event, args)
   }
 }
 
+// 规范化组件定义中的 emits 选项；
+// 将 emits 字段规范化为对象格式；
+// 支持字符串数组形式（如 emits: ['click']）；
+// 合并 mixins、extends 中的 emits；
+// 结果会被缓存进 appContext.emitsCache，避免重复处理。
 export function normalizeEmitsOptions(
   comp: ConcreteComponent,
   appContext: AppContext,
@@ -285,6 +316,11 @@ export function normalizeEmitsOptions(
 // Check if an incoming prop key is a declared emit event listener.
 // e.g. With `emits: { click: null }`, props named `onClick` and `onclick` are
 // both considered matched listeners.
+// 判断传入的 prop 是否是一个合法的事件监听器。
+// 判断传入的 prop（如 onClick）是否与 emits 中声明的事件匹配：
+// 必须以 on 开头；
+// 移除 on 和 Once 后缀；
+// 检查 camelCase、hyphenated、原始形式是否存在于 emits 配置中。
 export function isEmitListener(
   options: ObjectEmitsOptions | null,
   key: string,

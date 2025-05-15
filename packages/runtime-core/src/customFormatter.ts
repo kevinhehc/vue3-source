@@ -12,6 +12,8 @@ import { EMPTY_OBJ, extend, isArray, isFunction, isObject } from '@vue/shared'
 import type { ComponentInternalInstance, ComponentOptions } from './component'
 import type { ComponentPublicInstance } from './componentPublicInstance'
 
+// 用于增强开发者调试体验。它通过注册一个 Chrome DevTools 自定义格式化器，
+// 让开发者在控制台中以更直观的方式查看 Vue 响应式对象、组件实例等内容。
 export function initCustomFormatter(): void {
   /* eslint-disable no-restricted-globals */
   if (!__DEV__ || typeof window === 'undefined') {

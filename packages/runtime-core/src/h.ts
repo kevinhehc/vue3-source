@@ -200,24 +200,46 @@ export function h<P>(
 ): VNode
 
 // Actual implementation
+//  h() 函数（Hyperscript helper）的真实实现，用于在 渲染函数 中创建虚拟节点（VNode）。
+//  它是用户态 h() 函数的入口，并最终调用 createVNode()。
+
+// type：组件、元素标签、或一个函数（VNode 的类型）。
+// propsOrChildren：第二个参数，可能是 props，也可能是 children。
+// children：第三个参数，仅当第二个是 props 时存在。
 export function h(type: any, propsOrChildren?: any, children?: any): VNode {
+  // 判断传入了几个参数，以下分支分别处理不同情况。
   const l = arguments.length
+  // 有两个参数时，propsOrChildren 可能是 props、VNode、数组或字符串。
   if (l === 2) {
+    // propsOrChildren 是单个 VNode（省略 props）
     if (isObject(propsOrChildren) && !isArray(propsOrChildren)) {
       // single vnode without props
       if (isVNode(propsOrChildren)) {
+        // 把 props 设为 null，把这个单个 VNode 包装成 children 数组。
+        // h('div', h('span')) // => children = [VNode]
         return createVNode(type, null, [propsOrChildren])
       }
       // props without children
+      // propsOrChildren 是 props 对象
+      // h('div', { id: 'foo' }) // 没有 children
       return createVNode(type, propsOrChildren)
     } else {
       // omit props
+      // propsOrChildren 是数组或字符串（省略 props）
+      // h('div', 'hello') // => children = 'hello'
+      // h('ul', [h('li'), h('li')]) // => children = VNode[]
       return createVNode(type, null, propsOrChildren)
     }
   } else {
+    // 三个或更多参数
     if (l > 3) {
+      // 超过三个参数，表示多个 children
+      // 把参数 2 之后的所有值视为子节点，打包成数组。
+      // h('div', null, h('p'), h('p')) // => children = [VNode, VNode]
       children = Array.prototype.slice.call(arguments, 2)
     } else if (l === 3 && isVNode(children)) {
+      // 第三个参数是单个 VNode，转换成数组
+      // h('div', null, h('p')) // => children = [VNode]
       children = [children]
     }
     return createVNode(type, propsOrChildren, children)

@@ -515,6 +515,8 @@ function createDuplicateChecker() {
 
 export let shouldCacheAccess = true
 
+// 将组件的选项式配置应用到实例中，
+// 包括执行生命周期钩子、绑定 data/methods/computed、注册 watch、处理 inject/provide、合并 mixins/extends 等。
 export function applyOptions(instance: ComponentInternalInstance): void {
   const options = resolveMergedOptions(instance)
   const publicThis = instance.proxy! as any
@@ -525,6 +527,8 @@ export function applyOptions(instance: ComponentInternalInstance): void {
 
   // call beforeCreate first before accessing other options since
   // the hook may mutate resolved options (#2791)
+  // 1. 初始化前钩子：beforeCreate
+  // 确保在访问其他选项前优先执行 beforeCreate（可能会影响 options 本身）。
   if (options.beforeCreate) {
     callHook(options.beforeCreate, instance, LifecycleHooks.BEFORE_CREATE)
   }
@@ -563,6 +567,8 @@ export function applyOptions(instance: ComponentInternalInstance): void {
     filters,
   } = options
 
+  // 2. 处理 props 重名检查（开发模式）
+  // 在 dev 模式下检查是否有重复定义的属性名（如同名的 prop、data、method）。
   const checkDuplicateProperties = __DEV__ ? createDuplicateChecker() : null
 
   if (__DEV__) {
@@ -921,6 +927,7 @@ export function createWatcher(
  * This is done only once per-component since the merging does not involve
  * instances.
  */
+// 返回最终合并后的配置项，支持全局 mixins、本地 mixins、继承 extends 的递归合并，并缓存结果。
 export function resolveMergedOptions(
   instance: ComponentInternalInstance,
 ): MergedComponentOptions {
@@ -963,6 +970,7 @@ export function resolveMergedOptions(
   return resolved
 }
 
+// 合并两个组件选项对象的核心函数，支持合并策略（data 合并、生命周期合并为数组、props/computed 合并等）。
 export function mergeOptions(
   to: any,
   from: any,

@@ -49,6 +49,7 @@ const map: Map<
   }
 > = new Map()
 
+// 注册组件实例，供热更新追踪
 export function registerHMR(instance: ComponentInternalInstance): void {
   const id = instance.type.__hmrId!
   let record = map.get(id)
@@ -59,10 +60,12 @@ export function registerHMR(instance: ComponentInternalInstance): void {
   record.instances.add(instance)
 }
 
+// 注销组件实例，供热更新追踪
 export function unregisterHMR(instance: ComponentInternalInstance): void {
   map.get(instance.type.__hmrId!)!.instances.delete(instance)
 }
 
+// 注册组件初始定义
 function createRecord(id: string, initialDef: HMRComponent): boolean {
   if (map.has(id)) {
     return false
@@ -78,6 +81,7 @@ function normalizeClassComponent(component: HMRComponent): ComponentOptions {
   return isClassComponent(component) ? component.__vccOpts : component
 }
 
+// 仅更新组件的 render 函数
 function rerender(id: string, newRender?: Function): void {
   const record = map.get(id)
   if (!record) {
@@ -101,6 +105,7 @@ function rerender(id: string, newRender?: Function): void {
   })
 }
 
+// 彻底替换组件定义并触发组件卸载/重建
 function reload(id: string, newComp: HMRComponent): void {
   const record = map.get(id)
   if (!record) return

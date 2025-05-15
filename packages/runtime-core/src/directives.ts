@@ -181,19 +181,34 @@ export function withDirectives<T extends VNode>(
   return vnode
 }
 
+// Vue 3 渲染过程中对自定义指令钩子的统一调度函数 invokeDirectiveHook，
+// 用于在合适的时机调用指令的各个生命周期钩子（created、beforeMount、mounted、beforeUpdate、updated、beforeUnmount、unmounted 等）。
 export function invokeDirectiveHook(
+  // vnode：当前 VNode，可能携带多个指令信息 (vnode.dirs)。
+  // prevVNode：前一次渲染对应的 VNode，用于更新阶段对比旧值；首次挂载时为 null。
+  // instance：所属组件实例，用于作为执行钩子的上下文。
+  // name：要调用的钩子名称，来自 ObjectDirective 接口的键（如 mounted、beforeUpdate 等）。
   vnode: VNode,
   prevVNode: VNode | null,
   instance: ComponentInternalInstance | null,
   name: keyof ObjectDirective,
 ): void {
+  // vnode.dirs 是当前节点上所有指令的绑定信息数组（DirectiveBinding[]）；
+  // 如果存在 prevVNode，则也取出旧的绑定数组 oldBindings，用于在更新时对比旧值。
   const bindings = vnode.dirs!
   const oldBindings = prevVNode && prevVNode.dirs!
+
+  // 2. 遍历每个指令绑定
   for (let i = 0; i < bindings.length; i++) {
     const binding = bindings[i]
     if (oldBindings) {
+      // 设置 oldValue（仅更新阶段）
+      // 如果在更新阶段（oldBindings 不为 null），将对应旧绑定的 value 赋给当前绑定的 oldValue，以便钩子函数内部能够对比新旧值。
       binding.oldValue = oldBindings[i].value
     }
+    // 4. 取出钩子函数
+    // binding.dir 是指令定义对象，可能直接包含钩子函数；
+    // 如果开启了兼容模式 (__COMPAT__) 且当前指令对象没有对应钩子，则通过 mapCompatDirectiveHook 映射到 Vue 2 风格的兼容钩子。
     let hook = binding.dir[name] as DirectiveHook | DirectiveHook[] | undefined
     if (__COMPAT__ && !hook) {
       hook = mapCompatDirectiveHook(name, binding.dir, instance)
@@ -201,13 +216,19 @@ export function invokeDirectiveHook(
     if (hook) {
       // disable tracking inside all lifecycle hooks
       // since they can potentially be called inside effects.
+      // 5. 调用钩子前暂停依赖跟踪
+      // 指令钩子可能在渲染过程中调用响应式读写操作，暂停 Vue 的响应式副作用跟踪，避免影响渲染过程中的依赖收集。
       pauseTracking()
+      // 6. 安全地执行钩子
+      // 使用 callWithAsyncErrorHandling 包装，确保如果钩子抛出错误能够被 Vue 的错误处理逻辑捕获；
+      // 传入参数依次是：指令对应的 DOM 元素 vnode.el、当前绑定对象 binding、新旧 VNode。
       callWithAsyncErrorHandling(hook, instance, ErrorCodes.DIRECTIVE_HOOK, [
         vnode.el,
         binding,
         vnode,
         prevVNode,
       ])
+      // 7. 恢复依赖跟踪
       resetTracking()
     }
   }

@@ -67,38 +67,58 @@ export type ContextualRenderFn = {
  * Wrap a slot function to memoize current rendering instance
  * @private compiler helper
  */
+// 主要用于将函数（特别是插槽函数）绑定到当前组件实例上下文，并控制 block tracking 的行为。
+// 这在 Vue 的编译产物（如模板中的插槽）中非常常见。
 export function withCtx(
+  // fn：原始的渲染函数，比如插槽函数 () => VNode[]。
+  // ctx：组件实例（默认是当前正在渲染的实例 currentRenderingInstance）。
+  // isNonScopedSlot：兼容构建中的标志，用于区分非作用域插槽（仅在 __COMPAT__ 构建中使用）。
   fn: Function,
   ctx: ComponentInternalInstance | null = currentRenderingInstance,
   isNonScopedSlot?: boolean, // __COMPAT__ only
 ): Function {
+  // 二、提前退出：无上下文或已包裹
+  // 如果没有当前实例上下文，直接返回原函数。
   if (!ctx) return fn
 
   // already normalized
+  // 如果该函数已经被 withCtx() 包裹过（即 _n 标志存在），避免重复包裹。
   if ((fn as ContextualRenderFn)._n) {
     return fn
   }
 
+  // 三、核心逻辑：创建带上下文的包装函数
   const renderFnWithContext: ContextualRenderFn = (...args: any[]) => {
     // If a user calls a compiled slot inside a template expression (#1745), it
     // can mess up block tracking, so by default we disable block tracking and
     // force bail out when invoking a compiled slot (indicated by the ._d flag).
     // This isn't necessary if rendering a compiled `<slot>`, so we flip the
     // ._d flag off when invoking the wrapped fn inside `renderSlot`.
+    // 1. slot block tracking 处理（优化性能）
+    // 如果是编译插槽函数（默认 _d = true），禁用 block tracking；
+    // 这是因为 slot 中的 block 结构与编译器输出可能冲突，禁用可避免 tracking 泄漏。
     if (renderFnWithContext._d) {
       setBlockTracking(-1)
     }
+    // 2. 设置当前渲染实例
+    // 切换当前渲染上下文为 ctx，确保调用期间响应式、getCurrentInstance()、inject() 等 API 使用正确组件实例。
     const prevInstance = setCurrentRenderingInstance(ctx)
     let res
     try {
+      // 3. 执行原始函数
       res = fn(...args)
     } finally {
+      // 4. 恢复上下文与 block tracking
+      // 恢复之前的渲染上下文；
+      // 若禁用了 block tracking，现在重新启用。
       setCurrentRenderingInstance(prevInstance)
       if (renderFnWithContext._d) {
         setBlockTracking(1)
       }
     }
 
+    // 5. 开发环境下通知 devtools
+    // 如果启用了 devtools，在每次执行插槽渲染函数时，触发组件更新通知。
     if (__DEV__ || __FEATURE_PROD_DEVTOOLS__) {
       devtoolsComponentUpdated(ctx)
     }
@@ -106,6 +126,10 @@ export function withCtx(
     return res
   }
 
+  // 四、打标记：标识这个函数已经被处理过
+  // _n：避免重复包裹；
+  // _c：标识为编译插槽（用于 vnode 处理中识别）；
+  // _d：表示禁用 block tracking（可在 renderSlot() 内部临时关闭）；
   // mark normalized to avoid duplicated wrapping
   renderFnWithContext._n = true
   // mark this as compiled by default
@@ -116,6 +140,7 @@ export function withCtx(
   renderFnWithContext._d = true
   // compat build only flag to distinguish scoped slots from non-scoped ones
   if (__COMPAT__ && isNonScopedSlot) {
+    // _ns 是兼容构建中的标记，标识这是“非作用域插槽”。
     renderFnWithContext._ns = true
   }
   return renderFnWithContext

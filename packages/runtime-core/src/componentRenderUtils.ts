@@ -36,12 +36,21 @@ import { setTransitionHooks } from './components/BaseTransition'
  */
 let accessedAttrs: boolean = false
 
+// 记录属性是否被访问（用于开发模式下检测 attrs 是否被消费）。
 export function markAttrsAccessed(): void {
   accessedAttrs = true
 }
 
 type SetRootFn = ((root: VNode) => void) | undefined
 
+// 用于 执行组件的渲染函数并生成最终的 VNode，同时处理各种边界情况、属性继承、指令、过渡等逻辑。
+// 渲染组件根节点，生成 VNode，用于后续 patch 过程。
+// → 判断组件类型（Stateful / Functional）
+// → 执行 render 函数，生成 VNode
+// → 处理 fallthroughAttrs（透传属性）
+// → 处理兼容层（class/style 等）
+// → 添加指令、过渡
+// → 返回最终 root VNode
 export function renderComponentRoot(
   instance: ComponentInternalInstance,
 ): VNode {
@@ -281,6 +290,7 @@ export function renderComponentRoot(
  * template into a fragment root, but we need to locate the single element
  * root for attrs and scope id processing.
  */
+// 递归寻找真正的单个元素根节点，跳过注释和 Fragment。
 const getChildRoot = (vnode: VNode): [VNode, SetRootFn] => {
   const rawChildren = vnode.children as VNodeArrayChildren
   const dynamicChildren = vnode.dynamicChildren
@@ -310,6 +320,7 @@ const getChildRoot = (vnode: VNode): [VNode, SetRootFn] => {
   return [normalizeVNode(childRoot), setRoot]
 }
 
+// 从一组 vnode children 中筛选出唯一有效的元素根节点。
 export function filterSingleRoot(
   children: VNodeArrayChildren,
   recurse = true,
@@ -342,6 +353,7 @@ export function filterSingleRoot(
   return singleRoot
 }
 
+// 过滤 attrs 中可下发的部分（class、style、onXXX）。
 const getFunctionalFallthrough = (attrs: Data): Data | undefined => {
   let res: Data | undefined
   for (const key in attrs) {
@@ -352,6 +364,7 @@ const getFunctionalFallthrough = (attrs: Data): Data | undefined => {
   return res
 }
 
+// 移除 v-model 事件监听器，防止重复下发。
 const filterModelListeners = (attrs: Data, props: NormalizedProps): Data => {
   const res: Data = {}
   for (const key in attrs) {
@@ -369,6 +382,10 @@ const isElementRoot = (vnode: VNode) => {
   )
 }
 
+// 判断组件是否需要更新：
+// 通过 patchFlag 快速判断（动态 props、slots）
+// 手动渲染或无 patchFlag 则进行逐项对比
+// 核心是比较 props 和 children
 export function shouldUpdateComponent(
   prevVNode: VNode,
   nextVNode: VNode,
@@ -450,6 +467,7 @@ export function shouldUpdateComponent(
   return false
 }
 
+// 检测新旧 props 是否有变化，忽略 emits 事件。
 function hasPropsChanged(
   prevProps: Data,
   nextProps: Data,
@@ -471,6 +489,7 @@ function hasPropsChanged(
   return false
 }
 
+// 用于更新高阶组件（HOC）中真实宿主元素引用，确保递归父子组件结构中的 DOM 正确连接。
 export function updateHOCHostEl(
   { vnode, parent }: ComponentInternalInstance,
   el: typeof vnode.el, // HostNode

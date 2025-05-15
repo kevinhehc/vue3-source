@@ -6,6 +6,8 @@ import { EMPTY_OBJ, isArray, isFunction, isPromise } from '@vue/shared'
 import { LifecycleHooks } from './enums'
 import { WatchErrorCodes } from '@vue/reactivity'
 
+// 异常的处理
+
 // contexts where user provided function may be executed, in addition to
 // lifecycle hooks.
 export enum ErrorCodes {

@@ -362,6 +362,7 @@ const getPublicInstance = (
   return getPublicInstance(i.parent)
 }
 
+// 定义了以 $ 开头的公共实例属性（如 $attrs, $slots, $emit, $nextTick 等）的 getter。
 export const publicPropertiesMap: PublicPropertiesMap =
   // Move PURE marker to new line to workaround compiler discarding it
   // due to type annotation
@@ -410,6 +411,7 @@ export const isReservedPrefix = (key: string): key is '_' | '$' =>
 const hasSetupBinding = (state: Data, key: string) =>
   state !== EMPTY_OBJ && !state.__isScriptSetup && hasOwn(state, key)
 
+//  Vue 内部组件实例的代理对象的 handler，主要定义 get / set 等拦截逻辑。
 export const PublicInstanceProxyHandlers: ProxyHandler<any> = {
   get({ _: instance }: ComponentRenderContext, key: string) {
     // 跳过reactivity代理，将渲染上下文设置成不可代理
@@ -663,6 +665,7 @@ export const RuntimeCompiledPublicInstanceProxyHandlers: ProxyHandler<any> =
 // In dev mode, the proxy target exposes the same properties as seen on `this`
 // for easier console inspection. In prod mode it will be an empty object so
 // these properties definitions can be skipped.
+// 构造用于开发环境下 proxy 的实际目标对象（ctx）；
 export function createDevRenderContext(instance: ComponentInternalInstance) {
   const target: Record<string, any> = {}
 
@@ -689,6 +692,7 @@ export function createDevRenderContext(instance: ComponentInternalInstance) {
 }
 
 // dev only
+// 将 props 显式挂到 ctx 上；
 export function exposePropsOnRenderContext(
   instance: ComponentInternalInstance,
 ): void {
@@ -709,6 +713,7 @@ export function exposePropsOnRenderContext(
 }
 
 // dev only
+// 将 setup 的返回值挂到 ctx，供模板访问。
 export function exposeSetupStateOnRenderContext(
   instance: ComponentInternalInstance,
 ): void {

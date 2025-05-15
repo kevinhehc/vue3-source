@@ -40,6 +40,8 @@ import { DeprecationTypes } from './compat/compatConfig'
 import { shouldSkipAttr } from './compat/attrsFallthrough'
 import { createInternalObject } from './internalObject'
 
+//  Vue 3 运行时 props 系统的完整实现。它非常核心，负责解析用户传入的 props、合并默认值、处理类型、更新响应式、校验有效性等
+
 export type ComponentPropsOptions<P = Data> =
   | ComponentObjectPropsOptions<P>
   | string[]
@@ -188,6 +190,10 @@ type NormalizedProp = PropOptions & {
 export type NormalizedProps = Record<string, NormalizedProp>
 export type NormalizedPropsOptions = [NormalizedProps, string[]] | []
 
+// 区分 declared props 与非声明的 attrs；
+// 合并 default、布尔处理、验证；
+// 创建响应式 props，并存到 instance.props；
+// 设置 instance.attrs 为非声明的属性集合。
 export function initProps(
   instance: ComponentInternalInstance,
   // 来自组件vnode 是传递到组件的props
@@ -243,6 +249,11 @@ function isInHmrContext(instance: ComponentInternalInstance | null) {
   }
 }
 
+// VNode 更新阶段的 props 对比与变更
+// 优先走 patchFlag 优化路径（仅对比部分动态 key）；
+// 否则走全量对比逻辑，删除旧值中未传入的字段；
+// 如果 propsOptions 不存在，所有字段走 attrs；
+// 如果 attrs 变化，触发响应式通知 trigger(attrs, SET, '')
 export function updateProps(
   instance: ComponentInternalInstance,
   // 新的来自VNode传递的props
@@ -392,6 +403,12 @@ export function updateProps(
   }
 }
 
+// 传入 props 的解析分配
+// 遍历传入的 rawProps，判断该 key 是否存在于声明中：
+// 若存在 → 存入 props；
+// 若不存在 & 非 emit → 存入 attrs；
+// 对于声明了默认值或布尔类型的字段，统一处理转换；
+// 返回 hasAttrsChanged 标志，供后续更新通知用。
 function setFullProps(
   instance: ComponentInternalInstance,
   // 传递到组件render后挂在VNode上的props
@@ -477,6 +494,12 @@ function setFullProps(
   return hasAttrsChanged
 }
 
+// 处理默认值和布尔转换
+// 判断是否存在 default；
+// 若值为 undefined，调用工厂函数并缓存；
+// Boolean 特殊处理：
+// 没传值 → false
+// 传入空字符串或 kebab key → true（如 <Comp prop /> → prop: true）
 function resolvePropValue(
   // 标准化后的 配置项
   options: NormalizedProps,
@@ -538,6 +561,12 @@ function resolvePropValue(
 
 const mixinPropsCache = new WeakMap<ConcreteComponent, NormalizedPropsOptions>()
 
+// 标准化 props 配置项
+// 合并 extends、mixins 中的 props；
+// 支持数组写法 ['foo', 'bar']；
+// 转换为 { key: { type, default, required... } } 的形式；
+// 标记需要特殊处理的 Boolean/Default 的字段（存在 default 或为 Boolean）；
+// 缓存结果以提升性能。
 export function normalizePropsOptions(
   comp: ConcreteComponent,
   appContext: AppContext,

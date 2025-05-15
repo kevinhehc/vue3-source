@@ -495,21 +495,41 @@ export function createPropsRestProxy(
  * ```
  * @internal
  */
+// 用于在执行异步逻辑时保存并恢复组件实例上下文，
+// 确保异步操作中的逻辑仍然能访问正确的组件实例（比如响应式追踪、inject、getCurrentInstance() 等）。
+// 参数 getAwaitable：是一个返回 Promise 或普通值的函数。
+// 返回一个元组：
+// [0] 是异步值（可能是一个 Promise）。
+// [1] 是一个回调函数，用于 恢复当前组件实例上下文。
 export function withAsyncContext(getAwaitable: () => any): [any, () => void] {
+  // 获取当前组件实例。
+  // ! 表示断言不为 null（即这个函数只应在组件上下文中调用）。
   const ctx = getCurrentInstance()!
   if (__DEV__ && !ctx) {
+    // 如果未在组件 setup 或生命周期钩子中调用，将会发出警告。
     warn(
       `withAsyncContext called without active current instance. ` +
         `This is likely a bug.`,
     )
   }
+  // 获取待处理的异步操作或值。
   let awaitable = getAwaitable()
+  // 在执行异步操作后立即清除 currentInstance，防止泄漏或影响后续逻辑。
+  // 注意：这是临时清除，在 Promise 完成后会重新设置回来。
   unsetCurrentInstance()
+  // 六、处理 Promise 场景中的错误恢复
   if (isPromise(awaitable)) {
+    // 如果 awaitable 是一个 Promise，拦截它的异常：
+    // 捕获后重新设置当前实例上下文；
+    // 然后将错误继续抛出。
+    // 这是为了确保即使在 awaitable 抛出异常的情况下，Vue 内部状态仍能恢复。
     awaitable = awaitable.catch(e => {
       setCurrentInstance(ctx)
       throw e
     })
   }
+  // 七、返回值：异步值和恢复函数
+  // 调用方可以在合适时机执行 setCurrentInstance(ctx) 恢复上下文；
+  // 通常配合 await 后的逻辑或 Suspense 异步分支处理使用。
   return [awaitable, () => setCurrentInstance(ctx)]
 }

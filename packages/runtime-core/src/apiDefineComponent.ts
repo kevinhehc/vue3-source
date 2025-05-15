@@ -303,13 +303,19 @@ export function defineComponent<
 // implementation, close to no-op
 /*! #__NO_SIDE_EFFECTS__ */
 export function defineComponent(
+  // options：可以是一个组件选项对象，也可以是一个 setup() 函数（简化写法）。
+  // extraOptions：可选的额外组件选项，内部使用。
   options: unknown,
   extraOptions?: ComponentOptions,
 ) {
+  // 若 options 是函数（即 setup 函数形式）：
   return isFunction(options)
-    ? // #8236: extend call and options.name access are considered side-effects
+    ? // 某些工具（如 Rollup）可能错误地认为 extend() 调用或 options.name 访问有副作用；
+      // 所以这里用 IIFE + PURE 注释 强制让工具知道它是安全的、可优化的。
+      // #8236: extend call and options.name access are considered side-effects
       // by Rollup, so we have to wrap it in a pure-annotated IIFE.
       /*@__PURE__*/ (() =>
+        // 通过 extend()（内部就是浅合并）来构造最终的组件定义。
         extend({ name: options.name }, extraOptions, { setup: options }))()
     : options
 }

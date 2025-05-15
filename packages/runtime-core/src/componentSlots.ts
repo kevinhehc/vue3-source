@@ -79,11 +79,13 @@ export type RawSlots = {
 
 const isInternalKey = (key: string) => key[0] === '_' || key === '$stable'
 
+// 将 slot 返回值规范为 VNode[]
 const normalizeSlotValue = (value: unknown): VNode[] =>
   isArray(value)
     ? value.map(normalizeVNode)
     : [normalizeVNode(value as VNodeChild)]
 
+// 包装 slot 函数为带上下文的可追踪函数
 const normalizeSlot = (
   key: string,
   rawSlot: Function,
@@ -112,6 +114,7 @@ const normalizeSlot = (
   return normalized
 }
 
+// 处理手写对象形式插槽（函数 / 非函数）
 const normalizeObjectSlots = (
   rawSlots: RawSlots,
   slots: InternalSlots,
@@ -144,6 +147,7 @@ const normalizeObjectSlots = (
   }
 }
 
+// 将普通 VNode 子节点转为 default slot
 const normalizeVNodeSlots = (
   instance: ComponentInternalInstance,
   children: VNodeNormalizedChildren,
@@ -162,6 +166,7 @@ const normalizeVNodeSlots = (
   instance.slots.default = () => normalized
 }
 
+// 	将编译插槽对象赋值到组件 slots 属性
 const assignSlots = (
   slots: InternalSlots,
   children: Slots,
@@ -178,6 +183,7 @@ const assignSlots = (
   }
 }
 
+// 初始化组件插槽
 export const initSlots = (
   instance: ComponentInternalInstance,
   children: VNodeNormalizedChildren,
@@ -202,6 +208,7 @@ export const initSlots = (
   }
 }
 
+// 更新插槽（响应父组件重新渲染）
 export const updateSlots = (
   instance: ComponentInternalInstance,
   children: VNodeNormalizedChildren,

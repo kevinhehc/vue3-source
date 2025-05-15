@@ -1,3 +1,4 @@
+// 枚举简称
 export enum LifecycleHooks {
   BEFORE_CREATE = 'bc',
   CREATED = 'c',

@@ -1,5 +1,5 @@
 // Core API ------------------------------------------------------------------
-
+// 导出
 export const version: string = __VERSION__
 export {
   // core

@@ -135,13 +135,21 @@ export interface App<HostElement = any> {
 
 export type OptionMergeFunction = (to: unknown, from: unknown) => any
 
+// 描述应用实例的全局配置项
 export interface AppConfig {
   // @private
+  // 判断标签是否是平台内建标签（如 div、span）。
+  // 多用于编译器阶段（如判断自定义元素）。
   readonly isNativeTag: (tag: string) => boolean
 
+  // 是否启用性能统计标志。
+  // 在 DevTools 中用于显示组件性能（仅开发模式启用）
   performance: boolean
+  // 组件选项合并策略，如生命周期钩子的合并方式。
   optionMergeStrategies: Record<string, OptionMergeFunction>
+  // 注册到 app.config.globalProperties 的内容会变成所有组件实例的公共属性（即 this.xxx）。
   globalProperties: ComponentCustomProperties & Record<string, any>
+  // 用于捕获全局未处理的错误和警告，防止程序崩溃。
   errorHandler?: (
     err: unknown,
     instance: ComponentPublicInstance | null,
@@ -157,17 +165,20 @@ export interface AppConfig {
    * Options to pass to `@vue/compiler-dom`.
    * Only supported in runtime compiler build.
    */
+  // 编译器配置（仅在 runtime compiler 版本中有效）。
   compilerOptions: RuntimeCompilerOptions
 
   /**
    * @deprecated use config.compilerOptions.isCustomElement
    */
+  // 已废弃，用 compilerOptions.isCustomElement 代替。
   isCustomElement?: (tag: string) => boolean
 
   /**
    * TODO document for 3.5
    * Enable warnings for computed getters that recursively trigger itself.
    */
+  // Vue 3.5 新增，用于检测递归触发的 computed 并发出警告。
   warnRecursiveComputed?: boolean
 
   /**
@@ -175,20 +186,30 @@ export interface AppConfig {
    * Default is `false` to avoid crashing on any error (and only logs it)
    * But in some cases, e.g. SSR, throwing might be more desirable.
    */
+  // 是否在生产环境中抛出未捕获错误（默认只是记录）。
+  // 在 SSR 中可能更希望强制抛出。
   throwUnhandledErrorInProduction?: boolean
 
   /**
    * Prefix for all useId() calls within this app
    */
+  // 设置 useId() 返回值的前缀，防止 SSR 重复 ID。
   idPrefix?: string
 }
 
+// 描述 Vue 应用实例的上下文信息，被每个组件实例共享引用。
 export interface AppContext {
+  // 当前上下文关联的 Vue 应用实例。
   app: App // for devtools
+  // 上文提到的应用配置。
   config: AppConfig
+  // 全局注册的 mixins，会影响所有组件。
   mixins: ComponentOptions[]
+
   components: Record<string, Component>
+  // 应用级别注册的组件和指令。
   directives: Record<string, Directive>
+  // 应用级别的 provide/inject 数据。
   provides: Record<string | symbol, any>
 
   /**
@@ -197,26 +218,31 @@ export interface AppContext {
    * optionMergeStrategies can affect merge behavior.
    * @internal
    */
+  // 缓存合并后的组件选项，用于性能优化。
   optionsCache: WeakMap<ComponentOptions, MergedComponentOptions>
   /**
    * Cache for normalized props options
    * @internal
    */
+  // 缓存组件的 props 规范化结果。
   propsCache: WeakMap<ConcreteComponent, NormalizedPropsOptions>
   /**
    * Cache for normalized emits options
    * @internal
    */
+  // 缓存组件的 emits 规范化结果。
   emitsCache: WeakMap<ConcreteComponent, ObjectEmitsOptions | null>
   /**
    * HMR only
    * @internal
    */
+  // 热更新（HMR）时调用，开发专用。
   reload?: () => void
   /**
    * v2 compat only
    * @internal
    */
+  // Vue 2 兼容用（v2 filters 支持）。
   filters?: Record<string, Function>
 }
 

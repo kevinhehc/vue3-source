@@ -72,13 +72,20 @@ export function injectHook(
   }
 }
 
+// 用于创建生命周期钩子注册函数的内部工具 createHook，它是 onMounted、onUpdated、onUnmounted 等组合式 API 的构造工厂。
 const createHook =
   <T extends Function = () => any>(lifecycle: LifecycleHooks) =>
   (
+    // hook: 用户传入的生命周期回调。
+    // target: 目标组件实例，默认是当前激活的组件实例 currentInstance。
     hook: T,
     target: ComponentInternalInstance | null = currentInstance,
   ): void => {
     // post-create lifecycle registrations are noops during SSR (except for serverPrefetch)
+    // SSR 特别处理
+    // 如果不在 SSR 中：直接注册。
+    // 如果在 SSR 中，只有 serverPrefetch 生命周期是有效的。
+    // 这可避免在 SSR 构建中注册无意义的客户端钩子（如 onMounted）。
     if (
       !isInSSRComponentSetup ||
       lifecycle === LifecycleHooks.SERVER_PREFETCH

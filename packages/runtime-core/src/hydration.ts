@@ -93,6 +93,11 @@ export const isComment = (node: Node): node is Comment =>
 // it out creates a ton of unnecessary complexity.
 // Hydration also depends on some renderer internal logic which needs to be
 // passed in via arguments.
+// 该函数返回两个方法：
+// hydrate(vnode, container)
+// hydrateNode(node, vnode, ...)
+// hydrate: 根节点入口，接管整个容器
+// hydrateNode: 逐节点对比 vnode 和现有 DOM，并完成绑定、修补、挂载等
 export function createHydrationFunctions(
   rendererInternals: RendererInternals<Node, Element>,
 ): [
@@ -120,6 +125,8 @@ export function createHydrationFunctions(
     },
   } = rendererInternals
 
+  // 如果容器为空，则直接走普通挂载流程（非 SSR）
+  // 否则从 container.firstChild 开始，调用 hydrateNode
   const hydrate: RootHydrateFunction = (vnode, container) => {
     if (!container.hasChildNodes()) {
       ;(__DEV__ || __FEATURE_PROD_HYDRATION_MISMATCH_DETAILS__) &&
@@ -138,6 +145,11 @@ export function createHydrationFunctions(
     container._vnode = vnode
   }
 
+  // 1. 判断 vnode 类型（Text、Comment、Static、Fragment、Element、Component、Teleport、Suspense）
+  // 2. 与对应的 DOM 节点类型进行对比
+  // 3. 不匹配时调用 handleMismatch 进行容错修复（卸载旧 DOM，挂载新 VNode）
+  // 4. 匹配时执行绑定、指令处理、子节点递归 hydrate、插入 ref 等
+  // 5. 返回下一个兄弟 DOM 节点供继续 hydrate
   const hydrateNode = (
     node: Node,
     vnode: VNode,
@@ -175,6 +187,9 @@ export function createHydrationFunctions(
     let nextNode: Node | null = null
     switch (type) {
       case Text:
+        // ode.nodeType !== TEXT → mismatch
+        // 数据不同：修改 node.data
+        // 返回下一个节点
         if (domType !== DOMNodeTypes.TEXT) {
           // #5728 empty text node inside a slot can cause hydration failure
           // because the server rendered HTML won't contain a text node
@@ -218,6 +233,8 @@ export function createHydrationFunctions(
         }
         break
       case Static:
+        // 预渲染静态片段（模板中未动态绑定的内容）
+        // 使用 outerHTML 捕获静态 HTML 内容
         if (isFragmentStart) {
           // entire template is static but SSRed as a fragment
           node = nextSibling(node)!
@@ -246,6 +263,9 @@ export function createHydrationFunctions(
         }
         break
       case Fragment:
+        // 起始为 <!-- [ -->，结束为 <!-- ] -->
+        // 调用 hydrateFragment 递归 hydrate 中间的节点
+        // 若找不到 ]，则视为 mismatch
         if (!isFragmentStart) {
           nextNode = onMismatch()
         } else {
@@ -369,6 +389,11 @@ export function createHydrationFunctions(
     return nextNode
   }
 
+  // - children hydrate
+  // - props 比对
+  // - style/class/booleanAttr 检查
+  // - appear 动画处理
+  // - 指令/生命周期钩子处理
   const hydrateElement = (
     el: Element,
     vnode: VNode,
@@ -672,6 +697,12 @@ export function createHydrationFunctions(
     }
   }
 
+  // 当 vnode 与现有 DOM 不匹配时：
+  // 打印警告
+  // 删除旧节点（或 Fragment 范围）
+  // 调用 patch(null, vnode, ...) → 全新挂载 vnode
+  // 更新 vnode.el 引用
+  // 对 HOC 组件更新宿主节点 updateHOCHostEl
   const handleMismatch = (
     node: Node,
     vnode: VNode,
@@ -790,6 +821,15 @@ export function createHydrationFunctions(
 /**
  * Dev only
  */
+// 用于检查：
+// class 内容不同
+// style 内容不等（CSS变量、v-show 的影响）
+// 常规/布尔属性不同
+//
+// 而不是一律替换节点，而是：
+// 检查差异
+// 打印告警
+// 在生产环境中忽略差异以提高性能
 function propHasMismatch(
   el: Element,
   key: string,

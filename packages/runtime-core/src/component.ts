@@ -185,30 +185,54 @@ export interface AllowedComponentProps {
 
 // Note: can't mark this whole interface internal because some public interfaces
 // extend it.
+// 接口是 Vue 3 中用于组件内部元信息（metadata） 的结构，
+// 主要由编译器或构建工具（如 SFC 编译器、HMR 机制）自动生成，用于运行时识别和辅助开发工具使用。
 export interface ComponentInternalOptions {
   /**
    * @internal
    */
+  // 表示当前组件的 scoped CSS 的作用域 ID；
+  // 当 <style scoped> 存在时，Vue 编译器会为组件生成一个唯一的 scope ID，例如 data-v-123abc；
+  // 用于在运行时为组件 DOM 打上正确的属性标记，以实现样式隔离。
   __scopeId?: string
+
   /**
    * @internal
    */
+  // 表示该组件是否使用了 <style module>；
+  // 类型为 Record<string, string>，即模块化 CSS 的映射表（class 名到 hash 后 class 名）；
+  // 用于支持 CSS Modules 的自动注入，例如 this.$style.red。
   __cssModules?: Data
+
   /**
    * @internal
    */
+  // 是该组件用于 热更新（HMR）的唯一标识；
+  // 构建工具（如 Vite）在开发时会给每个组件生成一个稳定的 ID，用于识别和替换组件；
+  // HMR 系统会对比该 ID 判断是否应该更新此组件。
   __hmrId?: string
+
   /**
    * Compat build only, for bailing out of certain compatibility behavior
    */
+  // 仅用于兼容构建（compat build）；
+  // 标记该组件为内置组件（如 <Transition>, <Teleport> 等）；
+  // 可用于跳过某些 Vue 2 兼容逻辑。
   __isBuiltIn?: boolean
+
   /**
    * This one should be exposed so that devtools can make use of it
    */
+  // 指向该组件的文件路径（通常是相对路径），如 "src/components/Foo.vue"；
+  // 主要用于开发工具，比如 Vue Devtools 用来标识组件来源；
+  // 也可用于调试信息和错误日志显示。
   __file?: string
   /**
    * name inferred from filename
    */
+  // 从文件名推导出的组件名称；
+  // 如果组件没有显式定义 name 选项，Vue 编译器会从文件名中推断（如 Foo.vue → "Foo"）；
+  // Devtools 和 warning 系统也会使用它。
   __name?: string
 }
 
@@ -388,6 +412,7 @@ export interface ComponentInternalInstance {
    * cache for proxy access type to avoid hasOwnProperty calls
    * @internal
    */
+  // 用于缓存每个 key 的来源（setup/data/props/ctx），提升访问性能（减少 hasOwn() 调用）。
   accessCache: Data | null
   /**
    * cache for render function values that rely on _ctx but won't need updates
